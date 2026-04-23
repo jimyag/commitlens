@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type PR struct {
@@ -29,10 +32,18 @@ type Commit struct {
 	Deletions int    `json:"deletions"`
 }
 
+// FetchProgress is reported during GetMergedPRsSince.
+type FetchProgress struct {
+	PRsFetched  int
+	PRsTotal    int // -1 if unknown
+	CommitsDone int
+}
+
 type Client struct {
-	token      string
-	baseURL    string
-	httpClient *http.Client
+	token       string
+	baseURL     string
+	httpClient  *http.Client
+	concurrency int
 }
 
 func NewClient(token string) *Client {
@@ -40,9 +51,17 @@ func NewClient(token string) *Client {
 		token = tokenFromGH()
 	}
 	return &Client{
-		token:      token,
-		baseURL:    "https://api.github.com",
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		token:       token,
+		baseURL:     "https://api.github.com",
+		httpClient:  &http.Client{Timeout: 30 * time.Second},
+		concurrency: 8,
+	}
+}
+
+// SetConcurrency controls how many commit-fetch requests run in parallel.
+func (c *Client) SetConcurrency(n int) {
+	if n > 0 {
+		c.concurrency = n
 	}
 }
 
@@ -81,8 +100,12 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, since time.Time) ([]PR, error) {
-	var result []PR
+// GetMergedPRsSince fetches all merged PRs since the given time, then fetches
+// their commits concurrently. onProgress is called after each batch completes;
+// pass nil to skip progress reporting.
+func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, since time.Time, onProgress func(FetchProgress)) ([]PR, error) {
+	// Phase 1: collect PR stubs page by page
+	var stubs []PR
 	page := 1
 	for {
 		var raw []struct {
@@ -112,7 +135,7 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 				done = true
 				break
 			}
-			pr := PR{
+			stubs = append(stubs, PR{
 				Number:    r.Number,
 				Title:     r.Title,
 				Author:    r.User.Login,
@@ -120,17 +143,59 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 				MergedAt:  *r.MergedAt,
 				Additions: r.Additions,
 				Deletions: r.Deletions,
-			}
-			commits, _ := c.GetPRCommits(ctx, owner, repo, r.Number)
-			pr.Commits = commits
-			result = append(result, pr)
+			})
 		}
 		if done {
 			break
 		}
 		page++
 	}
-	return result, nil
+
+	if len(stubs) == 0 {
+		return nil, nil
+	}
+
+	if onProgress != nil {
+		onProgress(FetchProgress{PRsFetched: 0, PRsTotal: len(stubs)})
+	}
+
+	// Phase 2: fetch commits for all PRs concurrently
+	results := make([]PR, len(stubs))
+	var (
+		mu   sync.Mutex
+		done int
+	)
+
+	sem := make(chan struct{}, c.concurrency)
+	g, gctx := errgroup.WithContext(ctx)
+
+	for i, stub := range stubs {
+		i, stub := i, stub
+		sem <- struct{}{}
+		g.Go(func() error {
+			defer func() { <-sem }()
+			commits, err := c.GetPRCommits(gctx, owner, repo, stub.Number)
+			if err != nil {
+				// Non-fatal: store PR without commits
+				commits = nil
+			}
+			stub.Commits = commits
+			results[i] = stub
+
+			if onProgress != nil {
+				mu.Lock()
+				done++
+				onProgress(FetchProgress{PRsFetched: done, PRsTotal: len(stubs), CommitsDone: done})
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (c *Client) GetPRCommits(ctx context.Context, owner, repo string, prNumber int) ([]Commit, error) {

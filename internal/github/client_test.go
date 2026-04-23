@@ -39,7 +39,7 @@ func TestClient_GetMergedPRsSince(t *testing.T) {
 	client.SetBaseURL(srv.URL)
 
 	since := time.Now().Add(-24 * time.Hour)
-	prs, err := client.GetMergedPRsSince(context.Background(), "jimyag", "commitlens", since)
+	prs, err := client.GetMergedPRsSince(context.Background(), "jimyag", "commitlens", since, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

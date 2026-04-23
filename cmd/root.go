@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/jimyag/commitlens/internal/cache"
@@ -72,14 +74,7 @@ func run(cmd *cobra.Command, args []string) error {
 		repos[i] = r.Owner + "/" + r.Repo
 	}
 
-	// 启动时自动增量同步
-	fmt.Fprintln(os.Stderr, "正在同步数据...")
-	for _, repo := range repos {
-		fmt.Fprintf(os.Stderr, "  同步 %s ...\n", repo)
-		if err := syncer.SyncRepo(cmd.Context(), repo); err != nil {
-			fmt.Fprintf(os.Stderr, "  警告: 同步 %s 失败: %v\n", repo, err)
-		}
-	}
+	runSync(cmd.Context(), syncer, repos)
 
 	// 加载聚合统计数据
 	var allStats []*cache.StatsData
@@ -104,4 +99,60 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	return tui.Run(syncer, allStats, repos)
+}
+
+// runSync runs all repos concurrently and prints real-time progress to stderr.
+func runSync(ctx context.Context, syncer *isync.Syncer, repos []string) {
+	fmt.Fprintln(os.Stderr, "正在同步数据...")
+
+	progress := make(chan isync.Progress, len(repos)*32)
+
+	// Track per-repo last line length for \r overwrite
+	var mu sync.Mutex
+	lines := make(map[string]int) // repo -> last printed line length
+
+	printProgress := func(p isync.Progress) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		var line string
+		switch {
+		case p.Err != nil:
+			line = fmt.Sprintf("  [%d/%d] %-30s 失败: %v", p.RepoIndex, p.RepoTotal, p.Repo, p.Err)
+		case p.Done:
+			line = fmt.Sprintf("  [%d/%d] %-30s 完成", p.RepoIndex, p.RepoTotal, p.Repo)
+		case p.PRsTotal > 0:
+			line = fmt.Sprintf("  [%d/%d] %-30s 拉取 commit %d/%d", p.RepoIndex, p.RepoTotal, p.Repo, p.PRsFetched, p.PRsTotal)
+		default:
+			line = fmt.Sprintf("  [%d/%d] %-30s 拉取 PR 列表...", p.RepoIndex, p.RepoTotal, p.Repo)
+		}
+
+		prev := lines[p.Repo]
+		if prev > 0 {
+			// Clear previous line and rewrite
+			fmt.Fprintf(os.Stderr, "\r%-*s\r%s", prev, "", line)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s", line)
+		}
+
+		if p.Done || p.Err != nil {
+			fmt.Fprintln(os.Stderr)
+			delete(lines, p.Repo)
+		} else {
+			lines[p.Repo] = len(line)
+		}
+	}
+
+	// Drain progress channel in background
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for p := range progress {
+			printProgress(p)
+		}
+	}()
+
+	syncer.SyncAll(ctx, repos, progress, 3)
+	wg.Wait()
 }
