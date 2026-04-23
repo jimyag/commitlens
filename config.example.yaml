@@ -1,0 +1,14 @@
+github:
+  token: ""  # 留空则自动使用 gh auth token
+
+repositories:
+  - owner: jimyag
+    repo: commitlens
+  - owner: jimyag
+    repo: jvp
+
+cache:
+  dir: ~/.commitlens/cache
+
+web:
+  port: 8080
