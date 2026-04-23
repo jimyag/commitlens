@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,13 +36,14 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{}
 	setDefaults(cfg)
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(expandHome(path))
 	if err != nil {
 		return nil, err
 	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+	cfg.Cache.Dir = expandHome(cfg.Cache.Dir)
 	if cfg.Cache.Dir == "" {
 		home, _ := os.UserHomeDir()
 		cfg.Cache.Dir = filepath.Join(home, ".commitlens", "cache")
@@ -50,6 +52,18 @@ func Load(path string) (*Config, error) {
 		cfg.Web.Port = 8080
 	}
 	return cfg, nil
+}
+
+// expandHome replaces a leading ~ with the user's home directory.
+func expandHome(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[1:])
+	}
+	return path
 }
 
 func DefaultPath() string {
