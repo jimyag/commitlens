@@ -1,3 +1,4 @@
-commitlens
+# go build -o commitlens .
+/commitlens
 *.commitlens/
 .claude/
