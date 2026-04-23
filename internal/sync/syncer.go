@@ -98,6 +98,23 @@ func (s *Syncer) SyncRepo(ctx context.Context, repo string) error {
 	return s.syncRepo(ctx, repo, nil)
 }
 
+// mergePRs merges newPRs into existing, deduplicating by PR number.
+// newPRs are placed first (they have fresher data).
+func mergePRs(newPRs, existing []gh.PR) []gh.PR {
+	seen := make(map[int]struct{}, len(newPRs))
+	for _, pr := range newPRs {
+		seen[pr.Number] = struct{}{}
+	}
+	result := make([]gh.PR, 0, len(newPRs)+len(existing))
+	result = append(result, newPRs...)
+	for _, pr := range existing {
+		if _, ok := seen[pr.Number]; !ok {
+			result = append(result, pr)
+		}
+	}
+	return result
+}
+
 func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.FetchProgress)) error {
 	parts := strings.SplitN(repo, "/", 2)
 	if len(parts) != 2 {
@@ -110,17 +127,16 @@ func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.F
 		return fmt.Errorf("load raw cache: %w", err)
 	}
 
+	// Zero time means fetch all history (first sync).
+	// Subsequent syncs use last_updated as the cutoff.
 	since := raw.LastUpdated
-	if since.IsZero() {
-		since = time.Now().AddDate(-1, 0, 0)
-	}
 
 	newPRs, err := s.client.GetMergedPRsSince(ctx, owner, name, since, onProgress)
 	if err != nil {
 		return fmt.Errorf("fetch PRs: %w", err)
 	}
 
-	raw.PRs = append(newPRs, raw.PRs...)
+	raw.PRs = mergePRs(newPRs, raw.PRs)
 	raw.LastUpdated = time.Now().UTC()
 	if err := s.rawCache.Save(raw); err != nil {
 		return fmt.Errorf("save raw cache: %w", err)

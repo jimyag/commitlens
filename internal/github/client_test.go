@@ -19,12 +19,13 @@ func TestClient_GetMergedPRsSince(t *testing.T) {
 			// First call: pulls list
 			prs := []map[string]any{
 				{
-					"number":    1,
-					"title":     "test pr",
-					"user":      map[string]any{"login": "jimyag", "avatar_url": "https://example.com/avatar"},
-					"merged_at": time.Now().Format(time.RFC3339),
-					"additions": 100,
-					"deletions": 20,
+					"number":     1,
+					"title":      "test pr",
+					"user":       map[string]any{"login": "jimyag", "avatar_url": "https://example.com/avatar"},
+					"merged_at":  time.Now().Format(time.RFC3339),
+					"updated_at": time.Now().Format(time.RFC3339),
+					"additions":  100,
+					"deletions":  20,
 				},
 			}
 			json.NewEncoder(w).Encode(prs)

@@ -109,15 +109,14 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 	page := 1
 	for {
 		var raw []struct {
-			Number int    `json:"number"`
-			Title  string `json:"title"`
-			User   struct {
+			Number    int    `json:"number"`
+			Title     string `json:"title"`
+			User      struct {
 				Login     string `json:"login"`
 				AvatarURL string `json:"avatar_url"`
 			} `json:"user"`
 			MergedAt  *time.Time `json:"merged_at"`
-			Additions int        `json:"additions"`
-			Deletions int        `json:"deletions"`
+			UpdatedAt time.Time  `json:"updated_at"`
 		}
 		path := fmt.Sprintf("/repos/%s/%s/pulls?state=closed&per_page=100&page=%d&sort=updated&direction=desc", owner, repo, page)
 		if err := c.get(ctx, path, &raw); err != nil {
@@ -128,12 +127,15 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 		}
 		done := false
 		for _, r := range raw {
-			if r.MergedAt == nil {
-				continue
-			}
-			if r.MergedAt.Before(since) {
+			// Stop paging when updated_at falls before our cutoff.
+			// Use updated_at (not merged_at) because sort order is by updated.
+			if !since.IsZero() && r.UpdatedAt.Before(since) {
 				done = true
 				break
+			}
+			// Only include merged PRs (merged_at is null for closed-unmerged).
+			if r.MergedAt == nil {
+				continue
 			}
 			stubs = append(stubs, PR{
 				Number:    r.Number,
@@ -141,8 +143,6 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 				Author:    r.User.Login,
 				AvatarURL: r.User.AvatarURL,
 				MergedAt:  *r.MergedAt,
-				Additions: r.Additions,
-				Deletions: r.Deletions,
 			})
 		}
 		if done {
@@ -159,7 +159,8 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 		onProgress(FetchProgress{PRsFetched: 0, PRsTotal: len(stubs)})
 	}
 
-	// Phase 2: fetch commits for all PRs concurrently
+	// Phase 2: fetch PR details (additions/deletions) and commits concurrently.
+	// The list API omits additions/deletions; the individual PR endpoint has them.
 	results := make([]PR, len(stubs))
 	var (
 		mu   sync.Mutex
@@ -174,11 +175,15 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 		sem <- struct{}{}
 		g.Go(func() error {
 			defer func() { <-sem }()
-			commits, err := c.GetPRCommits(gctx, owner, repo, stub.Number)
-			if err != nil {
-				// Non-fatal: store PR without commits
-				commits = nil
+
+			// Fetch additions/deletions from individual PR endpoint
+			if add, del, err := c.getPRStats(gctx, owner, repo, stub.Number); err == nil {
+				stub.Additions = add
+				stub.Deletions = del
 			}
+
+			// Fetch commits (non-fatal if it fails)
+			commits, _ := c.GetPRCommits(gctx, owner, repo, stub.Number)
 			stub.Commits = commits
 			results[i] = stub
 
@@ -196,6 +201,19 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 		return nil, err
 	}
 	return results, nil
+}
+
+// getPRStats fetches additions and deletions for a single PR.
+func (c *Client) getPRStats(ctx context.Context, owner, repo string, prNumber int) (additions, deletions int, err error) {
+	var raw struct {
+		Additions int `json:"additions"`
+		Deletions int `json:"deletions"`
+	}
+	path := fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, prNumber)
+	if err = c.get(ctx, path, &raw); err != nil {
+		return 0, 0, err
+	}
+	return raw.Additions, raw.Deletions, nil
 }
 
 func (c *Client) GetPRCommits(ctx context.Context, owner, repo string, prNumber int) ([]Commit, error) {
