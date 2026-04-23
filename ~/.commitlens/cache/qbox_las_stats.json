@@ -1,0 +1,711 @@
+{
+  "repo": "qbox/las",
+  "computed_at": "2026-04-23T15:51:18.378235Z",
+  "contributors": {
+    "2788": {
+      "login": "2788",
+      "avatar_url": "https://avatars.githubusercontent.com/u/15196134?v=4",
+      "pr_count": 43,
+      "commit_count": 334,
+      "additions": 0,
+      "deletions": 0
+    },
+    "Erickw87": {
+      "login": "Erickw87",
+      "avatar_url": "https://avatars.githubusercontent.com/u/182626682?v=4",
+      "pr_count": 32,
+      "commit_count": 424,
+      "additions": 0,
+      "deletions": 0
+    },
+    "Luncher": {
+      "login": "Luncher",
+      "avatar_url": "https://avatars.githubusercontent.com/u/5138977?v=4",
+      "pr_count": 2,
+      "commit_count": 10,
+      "additions": 0,
+      "deletions": 0
+    },
+    "Misaki030112": {
+      "login": "Misaki030112",
+      "avatar_url": "https://avatars.githubusercontent.com/u/82640066?v=4",
+      "pr_count": 3,
+      "commit_count": 6,
+      "additions": 0,
+      "deletions": 0
+    },
+    "XiaoMo247": {
+      "login": "XiaoMo247",
+      "avatar_url": "https://avatars.githubusercontent.com/u/170708130?v=4",
+      "pr_count": 12,
+      "commit_count": 89,
+      "additions": 0,
+      "deletions": 0
+    },
+    "YangSen-qn": {
+      "login": "YangSen-qn",
+      "avatar_url": "https://avatars.githubusercontent.com/u/49863787?v=4",
+      "pr_count": 8,
+      "commit_count": 49,
+      "additions": 0,
+      "deletions": 0
+    },
+    "easonchiu": {
+      "login": "easonchiu",
+      "avatar_url": "https://avatars.githubusercontent.com/u/23095416?v=4",
+      "pr_count": 1,
+      "commit_count": 3,
+      "additions": 0,
+      "deletions": 0
+    },
+    "eirture": {
+      "login": "eirture",
+      "avatar_url": "https://avatars.githubusercontent.com/u/25894772?v=4",
+      "pr_count": 76,
+      "commit_count": 364,
+      "additions": 0,
+      "deletions": 0
+    },
+    "foreversmart": {
+      "login": "foreversmart",
+      "avatar_url": "https://avatars.githubusercontent.com/u/8978295?v=4",
+      "pr_count": 2,
+      "commit_count": 108,
+      "additions": 0,
+      "deletions": 0
+    },
+    "jiangpeipei327": {
+      "login": "jiangpeipei327",
+      "avatar_url": "https://avatars.githubusercontent.com/u/39264072?v=4",
+      "pr_count": 3,
+      "commit_count": 11,
+      "additions": 0,
+      "deletions": 0
+    },
+    "jimyag": {
+      "login": "jimyag",
+      "avatar_url": "https://avatars.githubusercontent.com/u/69233189?v=4",
+      "pr_count": 209,
+      "commit_count": 1966,
+      "additions": 0,
+      "deletions": 0
+    },
+    "lzfee0227": {
+      "login": "lzfee0227",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1984045?v=4",
+      "pr_count": 56,
+      "commit_count": 224,
+      "additions": 0,
+      "deletions": 0
+    },
+    "ma6174": {
+      "login": "ma6174",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1449133?v=4",
+      "pr_count": 31,
+      "commit_count": 214,
+      "additions": 0,
+      "deletions": 0
+    },
+    "miclle": {
+      "login": "miclle",
+      "avatar_url": "https://avatars.githubusercontent.com/u/186694?v=4",
+      "pr_count": 82,
+      "commit_count": 463,
+      "additions": 0,
+      "deletions": 0
+    },
+    "petezhuang": {
+      "login": "petezhuang",
+      "avatar_url": "https://avatars.githubusercontent.com/u/147291630?v=4",
+      "pr_count": 4,
+      "commit_count": 87,
+      "additions": 0,
+      "deletions": 0
+    },
+    "q96456": {
+      "login": "q96456",
+      "avatar_url": "https://avatars.githubusercontent.com/u/7919111?v=4",
+      "pr_count": 23,
+      "commit_count": 375,
+      "additions": 0,
+      "deletions": 0
+    },
+    "qiniu-ci": {
+      "login": "qiniu-ci",
+      "avatar_url": "https://avatars.githubusercontent.com/u/37365923?v=4",
+      "pr_count": 1,
+      "commit_count": 3,
+      "additions": 0,
+      "deletions": 0
+    },
+    "qumingzhentmdnan": {
+      "login": "qumingzhentmdnan",
+      "avatar_url": "https://avatars.githubusercontent.com/u/108972299?v=4",
+      "pr_count": 14,
+      "commit_count": 60,
+      "additions": 0,
+      "deletions": 0
+    },
+    "shijiayun": {
+      "login": "shijiayun",
+      "avatar_url": "https://avatars.githubusercontent.com/u/566037?v=4",
+      "pr_count": 12,
+      "commit_count": 119,
+      "additions": 0,
+      "deletions": 0
+    },
+    "xgopilot[bot]": {
+      "login": "xgopilot[bot]",
+      "avatar_url": "https://avatars.githubusercontent.com/in/1924301?v=4",
+      "pr_count": 124,
+      "commit_count": 920,
+      "additions": 0,
+      "deletions": 0
+    },
+    "xwen-winnie": {
+      "login": "xwen-winnie",
+      "avatar_url": "https://avatars.githubusercontent.com/u/10482947?v=4",
+      "pr_count": 62,
+      "commit_count": 195,
+      "additions": 0,
+      "deletions": 0
+    },
+    "yuzhai": {
+      "login": "yuzhai",
+      "avatar_url": "https://avatars.githubusercontent.com/u/5966085?v=4",
+      "pr_count": 25,
+      "commit_count": 117,
+      "additions": 0,
+      "deletions": 0
+    },
+    "zbb88888": {
+      "login": "zbb88888",
+      "avatar_url": "https://avatars.githubusercontent.com/u/7981158?v=4",
+      "pr_count": 3,
+      "commit_count": 34,
+      "additions": 0,
+      "deletions": 0
+    },
+    "zhangzqs": {
+      "login": "zhangzqs",
+      "avatar_url": "https://avatars.githubusercontent.com/u/34616640?v=4",
+      "pr_count": 94,
+      "commit_count": 1433,
+      "additions": 0,
+      "deletions": 0
+    }
+  },
+  "weekly": {
+    "2025-W29": {
+      "total_prs": 2,
+      "contributors": {
+        "foreversmart": 1,
+        "xwen-winnie": 1
+      }
+    },
+    "2025-W30": {
+      "total_prs": 1,
+      "contributors": {
+        "jimyag": 1
+      }
+    },
+    "2025-W31": {
+      "total_prs": 1,
+      "contributors": {
+        "foreversmart": 1
+      }
+    },
+    "2025-W32": {
+      "total_prs": 10,
+      "contributors": {
+        "eirture": 3,
+        "jimyag": 3,
+        "lzfee0227": 1,
+        "miclle": 2,
+        "qiniu-ci": 1
+      }
+    },
+    "2025-W33": {
+      "total_prs": 24,
+      "contributors": {
+        "Erickw87": 3,
+        "eirture": 6,
+        "jimyag": 2,
+        "lzfee0227": 4,
+        "ma6174": 3,
+        "miclle": 2,
+        "shijiayun": 1,
+        "zhangzqs": 3
+      }
+    },
+    "2025-W34": {
+      "total_prs": 21,
+      "contributors": {
+        "Erickw87": 2,
+        "eirture": 1,
+        "jimyag": 6,
+        "lzfee0227": 4,
+        "miclle": 5,
+        "xwen-winnie": 1,
+        "zhangzqs": 2
+      }
+    },
+    "2025-W35": {
+      "total_prs": 25,
+      "contributors": {
+        "Erickw87": 2,
+        "eirture": 4,
+        "jimyag": 6,
+        "lzfee0227": 1,
+        "ma6174": 4,
+        "miclle": 1,
+        "xwen-winnie": 1,
+        "zhangzqs": 6
+      }
+    },
+    "2025-W36": {
+      "total_prs": 28,
+      "contributors": {
+        "Erickw87": 7,
+        "jimyag": 1,
+        "lzfee0227": 2,
+        "ma6174": 3,
+        "miclle": 6,
+        "xwen-winnie": 7,
+        "zhangzqs": 2
+      }
+    },
+    "2025-W37": {
+      "total_prs": 26,
+      "contributors": {
+        "Erickw87": 6,
+        "YangSen-qn": 1,
+        "eirture": 5,
+        "jimyag": 4,
+        "lzfee0227": 1,
+        "ma6174": 3,
+        "xwen-winnie": 2,
+        "zhangzqs": 4
+      }
+    },
+    "2025-W38": {
+      "total_prs": 27,
+      "contributors": {
+        "2788": 2,
+        "Erickw87": 4,
+        "eirture": 2,
+        "jimyag": 9,
+        "lzfee0227": 2,
+        "miclle": 1,
+        "shijiayun": 1,
+        "xwen-winnie": 3,
+        "yuzhai": 1,
+        "zhangzqs": 2
+      }
+    },
+    "2025-W39": {
+      "total_prs": 26,
+      "contributors": {
+        "Erickw87": 2,
+        "eirture": 4,
+        "jimyag": 5,
+        "lzfee0227": 3,
+        "ma6174": 1,
+        "miclle": 2,
+        "xwen-winnie": 4,
+        "yuzhai": 2,
+        "zhangzqs": 3
+      }
+    },
+    "2025-W40": {
+      "total_prs": 4,
+      "contributors": {
+        "xwen-winnie": 2,
+        "yuzhai": 2
+      }
+    },
+    "2025-W41": {
+      "total_prs": 10,
+      "contributors": {
+        "Erickw87": 1,
+        "eirture": 2,
+        "jimyag": 5,
+        "ma6174": 1,
+        "miclle": 1
+      }
+    },
+    "2025-W42": {
+      "total_prs": 22,
+      "contributors": {
+        "Erickw87": 4,
+        "eirture": 2,
+        "jimyag": 8,
+        "miclle": 3,
+        "xgopilot[bot]": 2,
+        "xwen-winnie": 2,
+        "zhangzqs": 1
+      }
+    },
+    "2025-W43": {
+      "total_prs": 17,
+      "contributors": {
+        "Erickw87": 1,
+        "eirture": 1,
+        "jimyag": 6,
+        "ma6174": 1,
+        "miclle": 2,
+        "xgopilot[bot]": 3,
+        "xwen-winnie": 2,
+        "zhangzqs": 1
+      }
+    },
+    "2025-W44": {
+      "total_prs": 32,
+      "contributors": {
+        "eirture": 3,
+        "jimyag": 7,
+        "lzfee0227": 2,
+        "ma6174": 2,
+        "miclle": 1,
+        "q96456": 1,
+        "shijiayun": 3,
+        "xgopilot[bot]": 7,
+        "xwen-winnie": 1,
+        "yuzhai": 1,
+        "zhangzqs": 4
+      }
+    },
+    "2025-W45": {
+      "total_prs": 37,
+      "contributors": {
+        "YangSen-qn": 2,
+        "eirture": 5,
+        "jimyag": 4,
+        "lzfee0227": 1,
+        "ma6174": 1,
+        "miclle": 1,
+        "q96456": 1,
+        "shijiayun": 1,
+        "xgopilot[bot]": 17,
+        "xwen-winnie": 1,
+        "yuzhai": 1,
+        "zhangzqs": 2
+      }
+    },
+    "2025-W46": {
+      "total_prs": 49,
+      "contributors": {
+        "2788": 1,
+        "YangSen-qn": 1,
+        "eirture": 2,
+        "jimyag": 4,
+        "lzfee0227": 1,
+        "ma6174": 2,
+        "miclle": 4,
+        "shijiayun": 3,
+        "xgopilot[bot]": 12,
+        "xwen-winnie": 9,
+        "yuzhai": 7,
+        "zhangzqs": 3
+      }
+    },
+    "2025-W47": {
+      "total_prs": 30,
+      "contributors": {
+        "eirture": 3,
+        "jimyag": 3,
+        "lzfee0227": 1,
+        "ma6174": 1,
+        "miclle": 1,
+        "xgopilot[bot]": 11,
+        "xwen-winnie": 4,
+        "yuzhai": 3,
+        "zhangzqs": 3
+      }
+    },
+    "2025-W48": {
+      "total_prs": 44,
+      "contributors": {
+        "2788": 1,
+        "YangSen-qn": 1,
+        "eirture": 1,
+        "jimyag": 7,
+        "lzfee0227": 3,
+        "ma6174": 2,
+        "miclle": 5,
+        "q96456": 3,
+        "xgopilot[bot]": 15,
+        "xwen-winnie": 4,
+        "zbb88888": 1,
+        "zhangzqs": 1
+      }
+    },
+    "2025-W49": {
+      "total_prs": 32,
+      "contributors": {
+        "2788": 2,
+        "eirture": 5,
+        "jimyag": 10,
+        "lzfee0227": 3,
+        "miclle": 3,
+        "xgopilot[bot]": 3,
+        "xwen-winnie": 2,
+        "zbb88888": 2,
+        "zhangzqs": 2
+      }
+    },
+    "2025-W50": {
+      "total_prs": 38,
+      "contributors": {
+        "eirture": 4,
+        "jimyag": 5,
+        "lzfee0227": 2,
+        "ma6174": 2,
+        "miclle": 7,
+        "q96456": 1,
+        "shijiayun": 3,
+        "xgopilot[bot]": 5,
+        "xwen-winnie": 8,
+        "zhangzqs": 1
+      }
+    },
+    "2025-W51": {
+      "total_prs": 20,
+      "contributors": {
+        "2788": 3,
+        "eirture": 2,
+        "jimyag": 1,
+        "lzfee0227": 1,
+        "xgopilot[bot]": 4,
+        "xwen-winnie": 4,
+        "yuzhai": 1,
+        "zhangzqs": 4
+      }
+    },
+    "2025-W52": {
+      "total_prs": 31,
+      "contributors": {
+        "2788": 1,
+        "XiaoMo247": 1,
+        "jimyag": 5,
+        "lzfee0227": 5,
+        "miclle": 2,
+        "petezhuang": 1,
+        "q96456": 5,
+        "xgopilot[bot]": 2,
+        "xwen-winnie": 1,
+        "yuzhai": 1,
+        "zhangzqs": 7
+      }
+    },
+    "2026-W01": {
+      "total_prs": 7,
+      "contributors": {
+        "2788": 1,
+        "jimyag": 2,
+        "petezhuang": 1,
+        "q96456": 1,
+        "xwen-winnie": 1,
+        "zhangzqs": 1
+      }
+    },
+    "2026-W02": {
+      "total_prs": 31,
+      "contributors": {
+        "2788": 1,
+        "XiaoMo247": 1,
+        "eirture": 2,
+        "jimyag": 12,
+        "lzfee0227": 2,
+        "miclle": 3,
+        "q96456": 1,
+        "xgopilot[bot]": 1,
+        "xwen-winnie": 2,
+        "yuzhai": 1,
+        "zhangzqs": 5
+      }
+    },
+    "2026-W03": {
+      "total_prs": 33,
+      "contributors": {
+        "2788": 4,
+        "eirture": 2,
+        "jiangpeipei327": 2,
+        "jimyag": 3,
+        "lzfee0227": 5,
+        "petezhuang": 2,
+        "q96456": 2,
+        "xgopilot[bot]": 4,
+        "yuzhai": 1,
+        "zhangzqs": 8
+      }
+    },
+    "2026-W04": {
+      "total_prs": 21,
+      "contributors": {
+        "2788": 2,
+        "XiaoMo247": 1,
+        "jimyag": 7,
+        "lzfee0227": 4,
+        "miclle": 1,
+        "qumingzhentmdnan": 1,
+        "xgopilot[bot]": 3,
+        "zhangzqs": 2
+      }
+    },
+    "2026-W05": {
+      "total_prs": 40,
+      "contributors": {
+        "2788": 3,
+        "Luncher": 1,
+        "XiaoMo247": 2,
+        "eirture": 6,
+        "jimyag": 13,
+        "lzfee0227": 2,
+        "ma6174": 2,
+        "miclle": 4,
+        "q96456": 1,
+        "xgopilot[bot]": 4,
+        "yuzhai": 1,
+        "zhangzqs": 1
+      }
+    },
+    "2026-W06": {
+      "total_prs": 27,
+      "contributors": {
+        "2788": 1,
+        "Luncher": 1,
+        "XiaoMo247": 1,
+        "easonchiu": 1,
+        "eirture": 2,
+        "jimyag": 8,
+        "miclle": 1,
+        "q96456": 2,
+        "qumingzhentmdnan": 4,
+        "xgopilot[bot]": 2,
+        "yuzhai": 1,
+        "zhangzqs": 3
+      }
+    },
+    "2026-W07": {
+      "total_prs": 17,
+      "contributors": {
+        "2788": 3,
+        "jimyag": 3,
+        "lzfee0227": 4,
+        "miclle": 2,
+        "qumingzhentmdnan": 5
+      }
+    },
+    "2026-W09": {
+      "total_prs": 20,
+      "contributors": {
+        "Misaki030112": 1,
+        "XiaoMo247": 2,
+        "jimyag": 6,
+        "miclle": 3,
+        "q96456": 1,
+        "qumingzhentmdnan": 1,
+        "xgopilot[bot]": 3,
+        "zhangzqs": 3
+      }
+    },
+    "2026-W10": {
+      "total_prs": 24,
+      "contributors": {
+        "2788": 4,
+        "Misaki030112": 1,
+        "XiaoMo247": 1,
+        "eirture": 3,
+        "jimyag": 8,
+        "lzfee0227": 1,
+        "miclle": 1,
+        "qumingzhentmdnan": 1,
+        "xgopilot[bot]": 3,
+        "zhangzqs": 1
+      }
+    },
+    "2026-W11": {
+      "total_prs": 27,
+      "contributors": {
+        "2788": 3,
+        "Misaki030112": 1,
+        "XiaoMo247": 3,
+        "eirture": 3,
+        "jimyag": 5,
+        "ma6174": 1,
+        "miclle": 1,
+        "qumingzhentmdnan": 2,
+        "xgopilot[bot]": 2,
+        "zhangzqs": 6
+      }
+    },
+    "2026-W12": {
+      "total_prs": 14,
+      "contributors": {
+        "2788": 3,
+        "jiangpeipei327": 1,
+        "jimyag": 2,
+        "q96456": 2,
+        "xgopilot[bot]": 2,
+        "zhangzqs": 4
+      }
+    },
+    "2026-W13": {
+      "total_prs": 23,
+      "contributors": {
+        "2788": 3,
+        "eirture": 1,
+        "jimyag": 8,
+        "lzfee0227": 1,
+        "miclle": 2,
+        "q96456": 1,
+        "xgopilot[bot]": 3,
+        "zhangzqs": 4
+      }
+    },
+    "2026-W14": {
+      "total_prs": 21,
+      "contributors": {
+        "2788": 2,
+        "YangSen-qn": 1,
+        "eirture": 2,
+        "jimyag": 11,
+        "miclle": 1,
+        "xgopilot[bot]": 2,
+        "zhangzqs": 2
+      }
+    },
+    "2026-W15": {
+      "total_prs": 19,
+      "contributors": {
+        "YangSen-qn": 2,
+        "jimyag": 7,
+        "miclle": 4,
+        "xgopilot[bot]": 3,
+        "zhangzqs": 3
+      }
+    },
+    "2026-W16": {
+      "total_prs": 24,
+      "contributors": {
+        "2788": 1,
+        "jimyag": 8,
+        "ma6174": 2,
+        "miclle": 4,
+        "q96456": 1,
+        "xgopilot[bot]": 8
+      }
+    },
+    "2026-W17": {
+      "total_prs": 17,
+      "contributors": {
+        "2788": 2,
+        "jimyag": 4,
+        "miclle": 6,
+        "xgopilot[bot]": 3,
+        "yuzhai": 2
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "repo": "jimyag/jvp",
+  "last_updated": "2026-04-23T15:51:17.166287Z",
+  "prs": [
+    {
+      "number": 1,
+      "title": "feat(docker): 添加容器内运行 jvp 的部署方案",
+      "author": "jimyag",
+      "avatar_url": "https://avatars.githubusercontent.com/u/69233189?v=4",
+      "merged_at": "2025-12-15T16:37:51Z",
+      "additions": 0,
+      "deletions": 0,
+      "commits": [
+        {
+          "sha": "a206b0d998f226b6ce2986866f486dad445c047d",
+          "author": "jimyag",
+          "message": "feat(docker): 添加容器内运行 libvirtd 的部署方案\n\n提供在 Docker 容器内运行 libvirtd + JVP 的完整方案，便于快速部署\n和体验 JVP 虚拟化平台。容器内包含完整的虚拟化环境，无需在宿主机\n安装 libvirt。\n\n新增文件：\n- Dockerfile.libvirt: 基于 Debian 的镜像，包含 libvirtd、QEMU、\n  qemu-img、genisoimage 等全部依赖\n- docker-compose.yml: 配置设备挂载、端口映射、存储卷\n- docker/entrypoint.sh: 启动脚本，初始化 libvirtd 和默认网络\n- docker/supervisord.conf: 进程管理配置\n- docker/build.sh: 构建辅助脚本",
+          "additions": 0,
+          "deletions": 0
+        },
+        {
+          "sha": "3ce62a94e74ea79b5e2e8103ed72dbe5a16f0389",
+          "author": "jimyag",
+          "message": "refactor(docker): 合并 Dockerfile 并更新镜像配置\n\n将 Dockerfile.libvirt 的内容合并到主 Dockerfile 中，避免维护\n多个 Dockerfile 的复杂性。更新镜像名称为 ghcr.io/jimyag/jvp:latest\n以匹配 CI 发布配置。简化本地构建脚本。\n\n主要更改：\n- Dockerfile 从 Alpine 改为 Debian，包含完整虚拟化环境\n- 删除冗余的 Dockerfile.libvirt\n- docker-compose.yml 使用默认 Dockerfile\n- 简化 docker/build.sh 用于本地调试",
+          "additions": 0,
+          "deletions": 0
+        },
+        {
+          "sha": "49f936d5193e1fcbb3c84eceeaf16d6ce74f0d97",
+          "author": "jimyag",
+          "message": "fix(docker): 修复 supervisord 配置和启动脚本问题\n\n修复两个可能导致容器启动失败的问题：\n\n1. supervisord.conf 包含顶级部分（如 [supervisord]）会与 Debian\n   主配置文件冲突，导致重复部分解析错误。现只保留 [program:jvp]。\n\n2. entrypoint.sh 使用固定的 sleep 2 等待 libvirtd，可能不足导致\n   后续 virsh 命令失败。改用重试循环等待 libvirtd 就绪，最多 30 秒。\n   同时为状态显示命令添加错误容忍。",
+          "additions": 0,
+          "deletions": 0
+        },
+        {
+          "sha": "8b82a0f02119086515679ef759edc14f50bf48f8",
+          "author": "jimyag",
+          "message": "feat(docker): 完善 Docker 部署并修复多个运行时问题\n\n- 将基础镜像从 Debian 改为 Ubuntu 24.04\n- 添加 task debug-image 用于本地构建调试镜像\n- 修复 entrypoint.sh 中 libvirtd 启动和 socket 清理\n- 添加默认存储池自动创建\n- 修复视频模型从 qxl 改为 virtio 以提高兼容性\n- 添加镜像格式自动检测（.img 文件可能是 qcow2）\n- 修复卷删除支持 .iso 扩展名\n- 更新 README 添加 Docker 部署说明\n- 删除独立的 build.sh，统一使用 taskfile",
+          "additions": 0,
+          "deletions": 0
+        }
+      ]
+    }
+  ]
+}

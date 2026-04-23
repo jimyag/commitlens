@@ -105,7 +105,7 @@ func runSync(ctx context.Context, syncer *isync.Syncer, repos []string) {
 	progress := make(chan isync.Progress, len(repos)*64)
 
 	go func() {
-		syncer.SyncAll(ctx, repos, progress, 3)
+		syncer.SyncAll(ctx, repos, progress, 5)
 	}()
 
 	if err := tui.RunSyncProgress(repos, progress); err != nil {

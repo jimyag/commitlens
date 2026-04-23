@@ -47,13 +47,14 @@ func renderTrendView(a *App) string {
 		selectedLogin = allLogins[a.selectedContributor]
 	}
 
-	sel := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	loginList := make([]string, len(allLogins))
+	// 贡献者列表：竖向排列，高亮当前选中项
+	sel := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+	var loginLines []string
 	for i, l := range allLogins {
 		if i == a.selectedContributor {
-			loginList[i] = sel.Render("> " + l)
+			loginLines = append(loginLines, sel.Render("> "+l))
 		} else {
-			loginList[i] = "  " + l
+			loginLines = append(loginLines, "  "+l)
 		}
 	}
 
@@ -76,7 +77,7 @@ func renderTrendView(a *App) string {
 		xAxis,
 		"",
 		"贡献者 (↑↓ 选择):",
-		strings.Join(loginList, "  "),
+		strings.Join(loginLines, "\n"),
 		personSection,
 	}, "\n")
 }
@@ -94,16 +95,19 @@ func buildXAxis(periods []string, width int) string {
 	if len(periods) == 0 {
 		return ""
 	}
+	// Each label is at most 8 chars (e.g. "2025-W29") + 2 spaces gap
+	labelWidth := 10
+	maxLabels := width / labelWidth
+	if maxLabels < 1 {
+		maxLabels = 1
+	}
 	step := 1
-	if len(periods) > width/8 {
-		step = len(periods)/(width/8) + 1
+	if len(periods) > maxLabels {
+		step = (len(periods) + maxLabels - 1) / maxLabels
 	}
 	var labels []string
 	for i, p := range periods {
 		if i%step == 0 {
-			if len(p) > 7 {
-				p = p[len(p)-7:]
-			}
 			labels = append(labels, p)
 		}
 	}

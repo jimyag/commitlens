@@ -39,7 +39,7 @@ func (s *Server) handleSync(c *gin.Context) {
 		if repo != "" {
 			_ = s.syncer.SyncRepo(context.Background(), repo)
 		} else {
-			s.syncer.SyncAll(context.Background(), s.repos, nil, 3)
+			s.syncer.SyncAll(context.Background(), s.repos, nil, 5)
 		}
 	}()
 	c.JSON(http.StatusAccepted, gin.H{"message": "sync started"})

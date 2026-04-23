@@ -1,0 +1,22 @@
+{
+  "repo": "jimyag/jvp",
+  "computed_at": "2026-04-23T15:51:17.167062Z",
+  "contributors": {
+    "jimyag": {
+      "login": "jimyag",
+      "avatar_url": "https://avatars.githubusercontent.com/u/69233189?v=4",
+      "pr_count": 1,
+      "commit_count": 4,
+      "additions": 0,
+      "deletions": 0
+    }
+  },
+  "weekly": {
+    "2025-W51": {
+      "total_prs": 1,
+      "contributors": {
+        "jimyag": 1
+      }
+    }
+  }
+}

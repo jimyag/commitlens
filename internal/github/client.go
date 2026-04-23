@@ -54,7 +54,7 @@ func NewClient(token string) *Client {
 		token:       token,
 		baseURL:     "https://api.github.com",
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
-		concurrency: 8,
+		concurrency: 16,
 	}
 }
 
