@@ -42,7 +42,6 @@ export default function App() {
   const [allStats, setAllStats] = useState<StatsData[]>([])
   const [selectedRepo, setSelectedRepo] = useState<string>('')
   const [granularity, setGranularity] = useState<Granularity>('week')
-  const [selectedLogin, setSelectedLogin] = useState<string>('')
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<string>('')
 
@@ -63,7 +62,6 @@ export default function App() {
 
   const contributors = mergeContributors(filteredStats)
   const weekly = mergeWeekly(filteredStats)
-  const allLogins = Object.keys(contributors).sort()
 
   const handleSync = async () => {
     setSyncing(true)
@@ -75,8 +73,17 @@ export default function App() {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 16px', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32, flexWrap: 'wrap' }}>
+    <div
+      style={{
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        margin: 0,
+        padding: '20px 5% 32px',
+        fontFamily: 'system-ui, sans-serif',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: '#111' }}>CommitLens</h1>
 
         <select
@@ -121,33 +128,21 @@ export default function App() {
       </div>
 
       <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#374151' }}>贡献者排行</h2>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-          <ContributorTable contributors={contributors} />
+        <div style={{ marginBottom: 12 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 6px', color: '#374151' }}>合并 PR 趋势</h2>
+          <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+            上方为全仓库各周期 PR 数（柱顶为数量），其下按贡献者各一行。悬停单柱可查看该周期与 PR 数；底部可横向缩放平移多周期数据。
+          </p>
+        </div>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#fff' }}>
+          <TrendChart weekly={weekly} granularity={granularity} contributors={contributors} />
         </div>
       </section>
 
       <section>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#374151' }}>合并 PR 趋势</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13, color: '#6b7280' }}>叠加贡献者:</span>
-            <select
-              value={selectedLogin}
-              onChange={e => setSelectedLogin(e.target.value)}
-              style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13 }}
-            >
-              <option value="">不叠加</option>
-              {allLogins.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </div>
-        </div>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#fff' }}>
-          <TrendChart
-            weekly={weekly}
-            granularity={granularity}
-            selectedLogin={selectedLogin || undefined}
-          />
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#374151' }}>贡献者排行</h2>
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+          <ContributorTable contributors={contributors} />
         </div>
       </section>
     </div>
