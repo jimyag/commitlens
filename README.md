@@ -9,6 +9,26 @@
 - **PR 趋势**：按周/月/季/年聚合；可单仓或多仓；支持合著者（见下）。
 - **合著者（Co-authored-by）**：在 PR 各条 commit 的 message 中解析 `Co-authored-by: … <邮箱>`。仅当邮箱为 GitHub `users.noreply.github.com` 形式（含 `数字id+用户名@`）时解析为登录名；同一 PR 内同一用户只计一次。主作者与合著者均计入 **PR 数、Commit 数、增删行**（协作 PR 下多人头上有重复计行为预期表现）。
 
+## 界面预览
+
+以下示例为仓库 **`kubeovn/kube-ovn`** 的统计界面（随开发过程截取，供参考；实际以你本机数据与粒度为准）。
+
+### 终端 TUI
+
+单仓、**按「月」**聚合的合并 PR 趋势与选中贡献者个人柱图（左右分栏，底栏可横滚）：
+
+![CommitLens 终端 TUI：kube-ovn 按月的全仓与个人 PR 趋势](docs/screenshots/tui-kube-ovn-monthly-pr-trends.png)
+
+### Web 界面
+
+**按周**：上方为全仓库各周期柱顶 PR 数，下方按贡献者分行柱图，底部滑块可横向浏览更多周期。
+
+![CommitLens Web：kube-ovn 按周的全仓与贡献者 PR 趋势](docs/screenshots/web-kube-ovn-weekly-pr-trends.png)
+
+**按季**：与按周相同布局，横轴为季度刻度。
+
+![CommitLens Web：kube-ovn 按季的全仓与贡献者 PR 趋势](docs/screenshots/web-kube-ovn-quarterly-pr-trends.png)
+
 ## 构建
 
 需安装 **Go**（版本以 `go.mod` 为准）、**Node.js**（用于打前端包）。
