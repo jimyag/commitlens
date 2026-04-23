@@ -1,10 +1,10 @@
 .PHONY: build frontend test clean run-web run
 
-frontend:
-	cd frontend && npm run build
-
 build: frontend
 	go build -o commitlens .
+
+frontend:
+	cd frontend && npm run build
 
 test:
 	go test ./...
