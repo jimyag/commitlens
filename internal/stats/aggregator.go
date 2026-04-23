@@ -16,16 +16,27 @@ func Aggregate(raw *cache.RawData) *cache.StatsData {
 	}
 
 	for _, pr := range raw.PRs {
-		c := getOrCreate(result.Contributors, pr.Author, pr.AvatarURL)
-		c.PRCount++
-		c.CommitCount += len(pr.Commits)
-		c.Additions += pr.Additions
-		c.Deletions += pr.Deletions
+		participants := uniquePRParticipants(&pr)
+		nc := len(pr.Commits)
+		// 主作者 + Co-authored-by 合著者；同 PR 内每人只计 1 次。PR/提交/增删行均计给每位参与者（协作 PR 的代码量在多人上可重复计）
+		for _, login := range participants {
+			avatar := ""
+			if login == pr.Author {
+				avatar = pr.AvatarURL
+			}
+			c := getOrCreate(result.Contributors, login, avatar)
+			c.PRCount++
+			c.CommitCount += nc
+			c.Additions += pr.Additions
+			c.Deletions += pr.Deletions
+		}
 
 		week := WeekKey(pr.MergedAt)
 		w := getOrCreateWeek(result.Weekly, week)
 		w.TotalPRs++
-		w.Contributors[pr.Author]++
+		for _, login := range participants {
+			w.Contributors[login]++
+		}
 	}
 
 	return result
