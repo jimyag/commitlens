@@ -103,7 +103,8 @@ func run(cmd *cobra.Command, args []string) error {
 
 // runSync launches a bubbletea progress UI while syncing all repos concurrently.
 func runSync(ctx context.Context, syncer *isync.Syncer, repos []string) {
-	progress := make(chan isync.Progress, len(repos)*64)
+	// Large buffer so sync never blocks on progress while TUI is drawing (multi‑repo × large PR counts).
+	progress := make(chan isync.Progress, 65536)
 
 	go func() {
 		syncer.SyncAll(ctx, repos, progress, 5)

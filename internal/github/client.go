@@ -35,8 +35,12 @@ type Commit struct {
 // FetchProgress is reported during GetMergedPRsSince.
 type FetchProgress struct {
 	PRsFetched  int
-	PRsTotal    int // -1 if unknown
+	PRsTotal    int // -1 during list phase; >=0 in detail phase
 	CommitsDone int
+	// ListPage is the current GitHub list API page (1-based) when PRsTotal < 0; 0 in detail phase.
+	ListPage int
+	// Log is a short English status line (e.g. list paging); optional; shown by sync UI.
+	Log string
 }
 
 type Client struct {
@@ -148,6 +152,14 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 		if done {
 			break
 		}
+		if onProgress != nil && len(stubs) > 0 {
+			onProgress(FetchProgress{
+				PRsFetched: len(stubs),
+				PRsTotal:   -1,
+				ListPage:   page,
+				Log:        fmt.Sprintf("list page %d, %d PRs", page, len(stubs)),
+			})
+		}
 		page++
 	}
 
@@ -156,7 +168,12 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 	}
 
 	if onProgress != nil {
-		onProgress(FetchProgress{PRsFetched: 0, PRsTotal: len(stubs)})
+		onProgress(FetchProgress{
+			PRsFetched: 0,
+			PRsTotal:   len(stubs),
+			ListPage:   0,
+			Log:        "fetch PR details & commits",
+		})
 	}
 
 	// Phase 2: fetch PR details (additions/deletions) and commits concurrently.
@@ -190,7 +207,18 @@ func (c *Client) GetMergedPRsSince(ctx context.Context, owner, repo string, sinc
 			if onProgress != nil {
 				mu.Lock()
 				done++
-				onProgress(FetchProgress{PRsFetched: done, PRsTotal: len(stubs), CommitsDone: done})
+				n := len(stubs)
+				// Throttle: avoid thousands of channel sends and TUI frame backlog on huge repos; always send 1, last, and periodic samples.
+				step := max(1, n/200)
+				if n <= 20 || done == 1 || done == n || done%step == 0 {
+					onProgress(FetchProgress{
+						PRsFetched:  done,
+						PRsTotal:    n,
+						CommitsDone: done,
+						ListPage:    0,
+						Log:         "",
+					})
+				}
 				mu.Unlock()
 			}
 			return nil

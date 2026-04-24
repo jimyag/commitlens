@@ -28,7 +28,9 @@ type Progress struct {
 	RepoIndex   int
 	RepoTotal   int
 	PRsFetched  int
-	PRsTotal    int // -1 = still counting
+	PRsTotal    int // -1 = listing phase; >=0 in detail phase
+	ListPage    int
+	Log         string
 	Err         error
 	Done        bool
 }
@@ -60,6 +62,8 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []string, progress chan<- Pr
 						RepoTotal:  len(repos),
 						PRsFetched: p.PRsFetched,
 						PRsTotal:   p.PRsTotal,
+						ListPage:   p.ListPage,
+						Log:        p.Log,
 					}
 				}
 			}

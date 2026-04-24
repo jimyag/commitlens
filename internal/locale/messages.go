@@ -60,6 +60,9 @@ var enMessages = map[string]string{
 	"tui.sync.fail":  "failed: %s",
 	"tui.sync.done":  "done (%d PRs)",
 	"tui.sync.fetch": "fetching PR list...",
+	"tui.sync.listing": "listing PRs…",
+	"tui.sync.logHeader": "Execution log:",
+	"tui.sync.listingN":  "list: %d PRs",
 }
 
 var zhMessages = map[string]string{
@@ -117,6 +120,9 @@ var zhMessages = map[string]string{
 	"tui.sync.fail":  "失败: %s",
 	"tui.sync.done":  "完成 (%d PR)",
 	"tui.sync.fetch": "拉取 PR 列表...",
+	"tui.sync.listing": "正在列出 PR…",
+	"tui.sync.logHeader": "执行日志：",
+	"tui.sync.listingN":  "列表: %d 个 PR",
 }
 
 // GranularityLabel returns the label for TUI index 0..3 (week..year).

@@ -5,25 +5,29 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/bubbles/progress"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/jimyag/commitlens/internal/locale"
 	isync "github.com/jimyag/commitlens/internal/sync"
+)
+
+const (
+	syncRepoW     = 38
+	maxLogBuffer  = 48
+	maxLogDisplay = 8
 )
 
 // syncProgressModel is a short-lived bubbletea program shown during sync.
 type syncProgressModel struct {
 	repos    []string
 	states   map[string]*repoSyncState
-	bars     map[string]progress.Model
 	progCh   <-chan isync.Progress
-	allDone  bool
-	width    int
+	logLines []string // append-only execution log; older lines stay, new lines add
 }
 
 type repoSyncState struct {
+	// prsTotal: 0 = no progress yet, -1 = listing PRs, >0 = detail total
 	prsFetched int
 	prsTotal   int
+	listPage   int // GitHub list API page while prsTotal == -1
 	done       bool
 	err        error
 }
@@ -41,61 +45,61 @@ func waitForProgress(ch <-chan isync.Progress) tea.Cmd {
 	}
 }
 
-func newSyncProgressModel(repos []string, ch <-chan isync.Progress) syncProgressModel {
-	states := make(map[string]*repoSyncState, len(repos))
-	bars := make(map[string]progress.Model, len(repos))
-	for _, r := range repos {
-		states[r] = &repoSyncState{prsTotal: -1}
-		bars[r] = progress.New(
-			progress.WithGradient("#5A56E0", "#EE6FF8"),
-			progress.WithWidth(40),
-			progress.WithoutPercentage(),
-		)
+func (m *syncProgressModel) appendLog(line string) {
+	if line == "" {
+		return
 	}
-	return syncProgressModel{
-		repos:  repos,
-		states: states,
-		bars:   bars,
-		progCh: ch,
-		width:  80,
+	n := len(m.logLines)
+	if n > 0 && m.logLines[n-1] == line {
+		return
+	}
+	m.logLines = append(m.logLines, line)
+	if len(m.logLines) > maxLogBuffer {
+		m.logLines = m.logLines[len(m.logLines)-maxLogBuffer:]
 	}
 }
 
-func (m syncProgressModel) Init() tea.Cmd {
+func newSyncProgressModel(repos []string, ch <-chan isync.Progress) *syncProgressModel {
+	states := make(map[string]*repoSyncState, len(repos))
+	for _, r := range repos {
+		states[r] = &repoSyncState{prsTotal: 0, prsFetched: 0}
+	}
+	return &syncProgressModel{
+		repos:  repos,
+		states: states,
+		progCh: ch,
+	}
+}
+
+func (m *syncProgressModel) Init() tea.Cmd {
 	return waitForProgress(m.progCh)
 }
 
-func (m syncProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *syncProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		barWidth := m.width - 36
-		if barWidth < 20 {
-			barWidth = 20
-		}
-		for r, bar := range m.bars {
-			bar.Width = barWidth
-			m.bars[r] = bar
-		}
-
 	case progressTickMsg:
 		if !msg.ok {
-			// Channel closed → all done
-			m.allDone = true
 			return m, tea.Quit
 		}
 		p := msg.p
-		if st, ok := m.states[p.Repo]; ok {
-			if p.PRsTotal > 0 {
-				st.prsTotal = p.PRsTotal
-			}
-			if p.PRsFetched > 0 {
-				st.prsFetched = p.PRsFetched
-			}
-			st.done = p.Done
-			st.err = p.Err
+		if p.Log != "" {
+			m.appendLog(fmt.Sprintf("%s  %s", p.Repo, p.Log))
 		}
-		// Check if all repos finished
+		if st, ok := m.states[p.Repo]; ok {
+			st.err = p.Err
+			st.done = p.Done
+			if p.PRsTotal < 0 {
+				st.prsTotal = -1
+				st.prsFetched = p.PRsFetched
+				if p.ListPage > 0 {
+					st.listPage = p.ListPage
+				}
+			} else {
+				st.prsTotal = p.PRsTotal
+				st.prsFetched = p.PRsFetched
+				st.listPage = 0
+			}
+		}
 		allDone := true
 		for _, st := range m.states {
 			if !st.done && st.err == nil {
@@ -104,7 +108,6 @@ func (m syncProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if allDone {
-			m.allDone = true
 			return m, tea.Quit
 		}
 		return m, waitForProgress(m.progCh)
@@ -112,57 +115,72 @@ func (m syncProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-var (
-	labelStyle   = lipgloss.NewStyle().Width(30)
-	doneStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	errStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	pendingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-)
+func clipRepoName(name string) string {
+	if len(name) <= syncRepoW {
+		return name
+	}
+	return name[:syncRepoW-3] + "..."
+}
 
-func (m syncProgressModel) View() tea.View {
+func (m *syncProgressModel) View() tea.View {
 	var sb strings.Builder
 	sb.WriteString(locale.T("tui.sync.title"))
-
+	if n := len(m.logLines); n > 0 {
+		sb.WriteString(locale.T("tui.sync.logHeader") + "\n")
+		start := 0
+		if n > maxLogDisplay {
+			start = n - maxLogDisplay
+		}
+		for _, line := range m.logLines[start:] {
+			sb.WriteString("  " + line + "\n")
+		}
+		sb.WriteString("\n")
+	}
 	for _, repo := range m.repos {
 		st := m.states[repo]
-		bar := m.bars[repo]
-
-		label := labelStyle.Render(repo)
-
-		switch {
-		case st.err != nil:
-			sb.WriteString(fmt.Sprintf("  %s %s\n", label, errStyle.Render(fmt.Sprintf(locale.T("tui.sync.fail"), st.err.Error()))))
-
-		case st.done:
-			sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-				label,
-				bar.ViewAs(1.0),
-				doneStyle.Render(fmt.Sprintf(locale.T("tui.sync.done"), st.prsFetched)),
-			))
-
-		case st.prsTotal > 0:
-			pct := float64(st.prsFetched) / float64(st.prsTotal)
-			sb.WriteString(fmt.Sprintf("  %s %s %s\n",
-				label,
-				bar.ViewAs(pct),
-				fmt.Sprintf("%d/%d", st.prsFetched, st.prsTotal),
-			))
-
-		default:
-			sb.WriteString(fmt.Sprintf("  %s %s\n",
-				label,
-				pendingStyle.Render(locale.T("tui.sync.fetch")),
-			))
+		name := clipRepoName(repo)
+		if st.err != nil {
+			sb.WriteString(fmt.Sprintf("  %-38s  %s\n", name, fmt.Sprintf(locale.T("tui.sync.fail"), st.err.Error())))
+			continue
 		}
+		if st.done {
+			sb.WriteString(fmt.Sprintf("  %-38s  100%%  %s\n", name, fmt.Sprintf(locale.T("tui.sync.done"), st.prsFetched)))
+			continue
+		}
+		var pctS string
+		if st.prsTotal > 0 {
+			p := 100 * st.prsFetched / st.prsTotal
+			if p > 100 {
+				p = 100
+			}
+			pctS = fmt.Sprintf("%3d%%", p)
+		} else if st.prsTotal < 0 {
+			// Listing: no total yet; show list page as monotonic progress (not a % of total).
+			if st.listPage > 0 {
+				pctS = fmt.Sprintf("p%3d", st.listPage)
+			} else {
+				pctS = "p  -"
+			}
+		} else {
+			pctS = "  0%"
+		}
+		var rest string
+		if st.prsTotal < 0 {
+			rest = fmt.Sprintf(locale.T("tui.sync.listingN"), st.prsFetched)
+		} else if st.prsTotal > 0 {
+			rest = fmt.Sprintf("%d/%d", st.prsFetched, st.prsTotal)
+		} else {
+			rest = locale.T("tui.sync.fetch")
+		}
+		sb.WriteString(fmt.Sprintf("  %-38s  %5s  %s\n", name, pctS, rest))
 	}
-
 	return tea.NewView(sb.String())
 }
 
 // RunSyncProgress runs the sync progress TUI until all repos finish.
 func RunSyncProgress(repos []string, ch <-chan isync.Progress) error {
-	m := newSyncProgressModel(repos, ch)
-	p := tea.NewProgram(m)
+	prog := newSyncProgressModel(repos, ch)
+	p := tea.NewProgram(prog)
 	_, err := p.Run()
 	return err
 }
