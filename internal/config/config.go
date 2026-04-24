@@ -30,6 +30,8 @@ type Config struct {
 	Repositories []Repository `yaml:"repositories"`
 	Cache        Cache        `yaml:"cache"`
 	Web          Web          `yaml:"web"`
+	// Language: UI language for TUI and CLI (en, zh). Empty means COMMITLENS_LANG / LANG.
+	Language string `yaml:"language"`
 }
 
 func Load(path string) (*Config, error) {

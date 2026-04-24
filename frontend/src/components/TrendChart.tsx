@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import type { EChartsOption } from 'echarts'
 import type { BarSeriesOption, GridComponentOption, XAXisComponentOption, YAXisComponentOption } from 'echarts'
 import ReactECharts from 'echarts-for-react'
+import type { MessageKey } from '../i18n/bundles/en'
+import { useI18n } from '../i18n/I18nContext'
 import type { ContributorStats, WeeklyEntry } from '../api'
 
 export type Granularity = 'week' | 'month' | 'quarter' | 'year'
@@ -61,20 +63,21 @@ const R_PAD = 16
 const GAP_AFTER_TOTAL = 44
 
 export function TrendChart({ weekly, granularity, contributors }: Props) {
+  const { t, tf } = useI18n()
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
-    () => buildTrendOption(weekly, granularity, contributors),
-    [weekly, granularity, contributors],
+    () => buildTrendOption(weekly, granularity, contributors, { t, tf }),
+    [weekly, granularity, contributors, t, tf],
   )
 
   if (!option) {
-    return <div style={{ color: '#6b7280', padding: 24 }}>暂无周度数据，请先同步</div>
+    return <div style={{ color: '#6b7280', padding: 24 }}>{t('trend.emptyWeekly')}</div>
   }
 
   return (
     <div>
       {truncated > 0 && (
         <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 8px' }}>
-          为便于浏览，图内仅显示 PR 数前 {MAX_CONTRIBUTOR_CHARTS} 位（共 {totalLoginCount} 人），其余见下方「贡献者排行」。
+          {tf('trend.truncated', { n: MAX_CONTRIBUTOR_CHARTS, total: totalLoginCount })}
         </p>
       )}
       <div style={{ position: 'relative', width: '100%' }}>
@@ -150,11 +153,18 @@ export function TrendChart({ weekly, granularity, contributors }: Props) {
   )
 }
 
+type L10n = {
+  t: (k: MessageKey) => string
+  tf: (k: MessageKey, vars: Record<string, string | number>) => string
+}
+
 function buildTrendOption(
   weekly: Record<string, WeeklyEntry>,
   granularity: Granularity,
   contributors: Record<string, ContributorStats>,
+  l10n: L10n,
 ) {
+  const { t, tf } = l10n
   const periodMap: Record<string, { total: number; byLogin: Record<string, number> }> = {}
 
   for (const [weekKey, entry] of Object.entries(weekly)) {
@@ -223,7 +233,7 @@ function buildTrendOption(
   yAxes.push({
     type: 'value',
     gridIndex: 0,
-    name: '全仓库',
+    name: t('chart.repoWide'),
     nameTextStyle: { color: AXIS, fontSize: 11, fontWeight: 600 },
     nameLocation: 'end',
     min: 0,
@@ -231,7 +241,7 @@ function buildTrendOption(
     splitLine: { lineStyle: { color: '#f3f4f6' } },
   })
   series.push({
-    name: '全仓库',
+    name: t('chart.totalSeries'),
     type: 'bar',
     xAxisIndex: 0,
     yAxisIndex: 0,
@@ -306,10 +316,11 @@ function buildTrendOption(
         const v = p.value
         const who = p.seriesName ?? ''
         if (v == null || !who) return ''
+        const line = tf('chart.tooltipLine', { who: escapeHtml(who), value: v })
         return [
           `<div style="font-weight:600;margin-bottom:6px">${escapeHtml(period)}</div>`,
-          `${escapeHtml(who)}: <span style="font-weight:600">${v}</span> 个 PR`,
-        ].join('')
+          line,
+        ].join('<br/>')
       },
     },
     dataZoom: [

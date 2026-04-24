@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/locale"
 )
 
 func renderSummaryView(a *App) string {
@@ -43,7 +44,13 @@ func sortedContributors(m map[string]*cache.ContributorStats) []*cache.Contribut
 func renderContributorTable(contributors []*cache.ContributorStats) string {
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
 	header := headerStyle.Render(
-		fmt.Sprintf("%-20s %6s %8s %9s %9s", "贡献者", "PR数", "Commit数", "新增行", "删除行"),
+		fmt.Sprintf("%-22s %6s %8s %9s %9s",
+			locale.T("tui.table.contributor"),
+			locale.T("tui.table.pr"),
+			locale.T("tui.table.commits"),
+			locale.T("tui.table.added"),
+			locale.T("tui.table.deleted"),
+		),
 	)
 	sep := strings.Repeat("─", 56)
 	rows := []string{header, sep}
@@ -62,7 +69,7 @@ func renderContributorTable(contributors []*cache.ContributorStats) string {
 		rows = append(rows, row)
 	}
 	if len(contributors) == 0 {
-		rows = append(rows, "  暂无数据")
+		rows = append(rows, locale.T("tui.table.nodata"))
 	}
 	return strings.Join(rows, "\n")
 }

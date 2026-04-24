@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/locale"
 	"github.com/jimyag/commitlens/internal/stats"
 )
 
@@ -19,13 +20,13 @@ func renderTrendView(a *App) string {
 	normalizeTrendState(a)
 
 	scopeLine := formatTrendScopeLine(a)
-	granLabel := fmt.Sprintf("范围: %s  粒度: [%s]  ← →\n,. 切焦点(仓库/贡献)  m 单仓|多选  多选+空格  ↑↓\n柱图区宽可横移 shift+←/→  < >  Home End", scopeLine, granularityLabels[a.granularity])
+	granLabel := fmt.Sprintf(locale.T("tui.trend.hint"), scopeLine, locale.GranularityLabel(a.granularity))
 
 	periodData := aggregatePeriods(a)
 	periods := sortedPeriodKeys(periodData)
 
 	if len(periods) == 0 {
-		return granLabel + "\n\n暂无数据，按 r 刷新"
+		return granLabel + "\n\n" + locale.T("tui.trend.nodata")
 	}
 
 	vpW := a.width
@@ -40,12 +41,12 @@ func renderTrendView(a *App) string {
 	}
 
 	// 合并 PR：竖向条形图（ntcharts barchart，同 examples/barchart/vertical）+ 各点 PR 数
-	chartTitle := "合并 PR 趋势"
+	chartTitle := locale.T("tui.mergedPrTrend")
 	if a.nRepos() > 0 {
 		if a.trendSelectMulti {
-			chartTitle = fmt.Sprintf("已选 %d 个仓库 合并 PR 趋势", countTrendSelectedRepos(a))
+			chartTitle = fmt.Sprintf(locale.T("tui.mergedNReposFmt"), countTrendSelectedRepos(a))
 		} else {
-			chartTitle = fmt.Sprintf("%s  合并 PR 趋势", a.repoNames[a.trendOneRepo])
+			chartTitle = fmt.Sprintf(locale.T("tui.repoPrTrend"), a.repoNames[a.trendOneRepo])
 		}
 	}
 	totalValues := make([]float64, len(periods))
@@ -83,7 +84,7 @@ func renderTrendView(a *App) string {
 		}
 		personCanvasW := trendChartCanvasW(len(periods), rightW)
 		pChart := renderBarChart(periods, personValues, personCanvasW, 6, true)
-		personBlock = selectedLogin + " PR 趋势\n" + pChart
+		personBlock = fmt.Sprintf(locale.T("tui.trend.personTitle"), selectedLogin) + "\n" + pChart
 	} else {
 		personBlock = ""
 	}
@@ -115,11 +116,11 @@ func renderTrendView(a *App) string {
 		clipPerson = clipViewHorizontal(personBlock, a.trendHScroll, rightW)
 	}
 
-	contributorBlock := "贡献者 (↑↓) [. 焦点]:\n" + strings.Join(loginLines, "\n")
+	contributorBlock := locale.T("tui.trend.contributorHeader") + "\n" + strings.Join(loginLines, "\n")
 	leftCol := lipgloss.NewStyle().Width(leftW).Render(contributorBlock)
 	var rightCol string
 	if selectedLogin == "" {
-		rightCol = lipgloss.NewStyle().Width(rightW).Foreground(lipgloss.Color("240")).Render("选择贡献者后显示个人 PR 柱图")
+		rightCol = lipgloss.NewStyle().Width(rightW).Foreground(lipgloss.Color("240")).Render(locale.T("tui.trend.selectPersonHint"))
 	} else {
 		rightCol = clipPerson
 	}
@@ -233,16 +234,22 @@ func trendScrollStatusLine(off, maxOff, viewportW int) string {
 	}
 	var parts []string
 	if off > 0 {
-		parts = append(parts, "左侧还有")
+		parts = append(parts, locale.T("tui.scroll.left"))
 	}
 	if off < maxOff {
-		parts = append(parts, "右侧还有")
+		parts = append(parts, locale.T("tui.scroll.right"))
 	}
 	side := ""
 	if len(parts) > 0 {
-		side = "（" + strings.Join(parts, "，") + "）"
+		sep := "，"
+		o, c := "（", "）"
+		if locale.Current() == locale.En {
+			sep = ", "
+			o, c = "(", ")"
+		}
+		side = o + strings.Join(parts, sep) + c
 	}
-	line := fmt.Sprintf("视口 %d/%d 列 %s shift+←→ < > Home End", off, maxOff, side)
+	line := fmt.Sprintf(locale.T("tui.scroll.status"), off, maxOff, side)
 	if ansi.StringWidth(line) > viewportW && viewportW > 8 {
 		line = ansi.Truncate(line, viewportW, "")
 	}
@@ -368,7 +375,7 @@ func barDataFromPeriods(periods []string, values []float64, width, gap int, pers
 		out = append(out, barchart.BarData{
 			Label: xAxisLabel(periods[i], i, n, bw),
 			Values: []barchart.BarValue{
-				{Name: "PR", Value: values[i], Style: block},
+				{Name: locale.T("tui.barchart.pr"), Value: values[i], Style: block},
 			},
 		})
 	}
@@ -395,17 +402,17 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 	}
 	g := m.BarGap()
 	topLine := prValuesLineAboveChart(values, cellW, g)
-	return "柱顶 PR 数\n" + topLine + "\n" + m.View()
+	return locale.T("tui.bar.topPrCount") + "\n" + topLine + "\n" + m.View()
 }
 
 func formatTrendScopeLine(a *App) string {
 	if a.nRepos() == 0 {
-		return "无仓库"
+		return locale.T("tui.scope.norepos")
 	}
 	if !a.trendSelectMulti {
-		return "单 " + a.repoNames[a.trendOneRepo]
+		return locale.T("tui.scope.single") + a.repoNames[a.trendOneRepo]
 	}
-	return fmt.Sprintf("多 已选 %d 个", countTrendSelectedRepos(a))
+	return fmt.Sprintf(locale.T("tui.scope.multifmt"), countTrendSelectedRepos(a))
 }
 
 func countTrendSelectedRepos(a *App) int {
@@ -495,18 +502,18 @@ func normalizeTrendState(a *App) {
 func renderRepoPanel(a *App) string {
 	n := a.nRepos()
 	if n == 0 {
-		return "仓库: (无配置)"
+		return locale.T("tui.repoPanel.noconfig")
 	}
 	sel := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
-	mode := "单选  m→多选"
+	mode := locale.T("tui.repoPanel.modeSingle")
 	if a.trendSelectMulti {
-		mode = "多选  空格=勾选/取消(至少保留1个)  m→单选"
+		mode = locale.T("tui.repoPanel.modeMulti")
 	}
-	focus := "贡献者"
+	focus := locale.T("tui.focus.contributor")
 	if a.trendListFocus == trendFocusRepo {
-		focus = "仓库"
+		focus = locale.T("tui.focus.repo")
 	}
-	header := fmt.Sprintf("仓库  [焦点:%s]  %s  [,]=仓库  [.]=贡献者  ↑↓=移动", focus, mode)
+	header := fmt.Sprintf(locale.T("tui.repoPanel.header"), focus, mode)
 	lines := []string{header}
 	for i, name := range a.repoNames {
 		cursor := a.trendRepoCursor == i && a.trendListFocus == trendFocusRepo

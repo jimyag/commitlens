@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/locale"
 	isync "github.com/jimyag/commitlens/internal/sync"
 )
 
@@ -46,8 +47,6 @@ type App struct {
 	trendHScroll      int // 趋势图柱区横向视口左偏移（rune 列）
 	trendLastPeriodN  int // 用于周期数变化时重置横滚
 }
-
-var granularityLabels = []string{"周", "月", "季度", "年"}
 
 func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []string) *App {
 	return &App{
@@ -309,7 +308,7 @@ func (a *App) View() tea.View {
 }
 
 func (a *App) renderHeader() string {
-	tabs := []string{"[汇总]", "[单仓库]", "[趋势]"}
+	tabs := []string{locale.T("tui.tab.summary"), locale.T("tui.tab.repos"), locale.T("tui.tab.trend")}
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	line := ""
 	for i, t := range tabs {
@@ -319,15 +318,15 @@ func (a *App) renderHeader() string {
 			line += t + " "
 		}
 	}
-	return "CommitLens  " + line + "        tab:切换  r:刷新  q:退出"
+	return "CommitLens  " + line + locale.T("tui.header.hints")
 }
 
 func (a *App) renderStatus() string {
 	if a.syncing {
-		return "状态: 同步中..."
+		return locale.T("tui.status.syncing")
 	}
 	if a.err != nil {
-		return fmt.Sprintf("错误: %v", a.err)
+		return fmt.Sprintf(locale.T("tui.status.error"), a.err)
 	}
 	return ""
 }

@@ -5,11 +5,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jimyag/commitlens/internal/locale"
 )
 
 func renderRepoView(a *App) string {
 	if len(a.repoNames) == 0 {
-		return "无仓库配置"
+		return locale.T("tui.reposelect.noconfig")
 	}
 
 	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -23,7 +24,7 @@ func renderRepoView(a *App) string {
 	}
 	left := strings.Join(repoList, "\n")
 
-	right := "无数据"
+	right := locale.T("tui.reposelect.nodata")
 	if a.selectedRepo < len(a.stats) {
 		s := a.stats[a.selectedRepo]
 		contributors := sortedContributors(s.Contributors)

@@ -1,6 +1,9 @@
 github:
   token: ""  # 留空则自动使用 gh auth token
 
+# UI language: en, zh, or leave empty to use COMMITLENS_LANG / system LANG
+language: ""
+
 repositories:
   - owner: jimyag
     repo: commitlens

@@ -1,25 +1,29 @@
 import type { ContributorStats } from '../api'
+import { useI18n } from '../i18n/I18nContext'
 
 interface Props {
   contributors: Record<string, ContributorStats>
 }
 
 export function ContributorTable({ contributors }: Props) {
+  const { t } = useI18n()
   const sorted = Object.values(contributors).sort((a, b) => b.pr_count - a.pr_count)
 
   if (sorted.length === 0) {
-    return <p style={{ color: '#888' }}>暂无数据</p>
+    return <p style={{ color: '#888' }}>{t('table.empty')}</p>
   }
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
       <thead>
         <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f9fafb' }}>
-          <th style={{ textAlign: 'left', padding: '10px 12px', verticalAlign: 'middle' }}>贡献者</th>
-          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>PR 数</th>
-          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>Commit 数</th>
-          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>新增行</th>
-          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>删除行</th>
+          <th style={{ textAlign: 'left', padding: '10px 12px', verticalAlign: 'middle' }}>
+            {t('table.contributor')}
+          </th>
+          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.prs')}</th>
+          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.commits')}</th>
+          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.added')}</th>
+          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.deleted')}</th>
         </tr>
       </thead>
       <tbody>

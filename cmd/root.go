@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
+	"github.com/jimyag/commitlens/internal/locale"
 	gh "github.com/jimyag/commitlens/internal/github"
 	isync "github.com/jimyag/commitlens/internal/sync"
 	"github.com/jimyag/commitlens/internal/tui"
@@ -25,7 +26,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "commitlens",
 	Short: "GitHub contribution stats viewer",
-	Long:  "CommitLens 统计 GitHub 仓库各贡献者的 PR、commit 和增删行数据。",
+	Long:  "CommitLens shows per-contributor merged PR, commit, and line-change stats for GitHub repositories.",
 	RunE:  run,
 }
 
@@ -39,9 +40,9 @@ func ExecuteWithAssets(assets embed.FS) {
 }
 
 func init() {
-	rootCmd.Flags().BoolVar(&webMode, "web", false, "启动 Web UI 模式")
-	rootCmd.Flags().IntVar(&webPort, "port", 8080, "Web UI 监听端口")
-	rootCmd.Flags().StringVar(&configFile, "config", "", "配置文件路径（默认: ~/.commitlens/config.yaml）")
+	rootCmd.Flags().BoolVar(&webMode, "web", false, "start web UI")
+	rootCmd.Flags().IntVar(&webPort, "port", 8080, "web server listen port")
+	rootCmd.Flags().StringVar(&configFile, "config", "", "config file (default: ~/.commitlens/config.yaml)")
 }
 
 func run(cmd *cobra.Command, args []string) error {
@@ -53,15 +54,16 @@ func run(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "配置文件不存在: %s\n\n请创建配置文件，示例内容:\n\nrepositories:\n  - owner: your-org\n    repo: your-repo\n", cfgPath)
+			fmt.Fprintf(os.Stderr, "config file not found: %s\n\ncreate a config file, for example:\n\nrepositories:\n  - owner: your-org\n    repo: your-repo\n", cfgPath)
 			os.Exit(1)
 		}
 		return err
 	}
 
 	if err := os.MkdirAll(cfg.Cache.Dir, 0755); err != nil {
-		return fmt.Errorf("创建缓存目录失败: %w", err)
+		return fmt.Errorf("create cache directory: %w", err)
 	}
+	locale.Init(cfg.Language)
 
 	client := gh.NewClient(cfg.GitHub.Token)
 	rawCache := cache.NewRawCache(cfg.Cache.Dir)
@@ -79,7 +81,7 @@ func run(cmd *cobra.Command, args []string) error {
 	for _, repo := range repos {
 		s, err := statsCache.Load(repo)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "警告: 加载 %s 统计数据失败: %v\n", repo, err)
+			fmt.Fprintf(os.Stderr, "warning: could not load stats for %s: %v\n", repo, err)
 			continue
 		}
 		allStats = append(allStats, s)
@@ -91,7 +93,7 @@ func run(cmd *cobra.Command, args []string) error {
 			port = cfg.Web.Port
 		}
 		addr := fmt.Sprintf(":%d", port)
-		fmt.Printf("CommitLens Web UI 已启动: http://localhost%s\n", addr)
+		fmt.Printf("CommitLens web UI: http://localhost%s\n", addr)
 		srv := web.New(globalAssets, syncer, allStats, repos)
 		return srv.Run(addr)
 	}
@@ -100,7 +102,6 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 // runSync launches a bubbletea progress UI while syncing all repos concurrently.
-// For web mode (no interactive terminal), it falls back to plain stderr output.
 func runSync(ctx context.Context, syncer *isync.Syncer, repos []string) {
 	progress := make(chan isync.Progress, len(repos)*64)
 

@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jimyag/commitlens/internal/locale"
 	isync "github.com/jimyag/commitlens/internal/sync"
 )
 
@@ -120,7 +121,7 @@ var (
 
 func (m syncProgressModel) View() tea.View {
 	var sb strings.Builder
-	sb.WriteString("正在同步数据...\n\n")
+	sb.WriteString(locale.T("tui.sync.title"))
 
 	for _, repo := range m.repos {
 		st := m.states[repo]
@@ -130,13 +131,13 @@ func (m syncProgressModel) View() tea.View {
 
 		switch {
 		case st.err != nil:
-			sb.WriteString(fmt.Sprintf("  %s %s\n", label, errStyle.Render("失败: "+st.err.Error())))
+			sb.WriteString(fmt.Sprintf("  %s %s\n", label, errStyle.Render(fmt.Sprintf(locale.T("tui.sync.fail"), st.err.Error()))))
 
 		case st.done:
 			sb.WriteString(fmt.Sprintf("  %s %s %s\n",
 				label,
 				bar.ViewAs(1.0),
-				doneStyle.Render(fmt.Sprintf("完成 (%d PR)", st.prsFetched)),
+				doneStyle.Render(fmt.Sprintf(locale.T("tui.sync.done"), st.prsFetched)),
 			))
 
 		case st.prsTotal > 0:
@@ -150,7 +151,7 @@ func (m syncProgressModel) View() tea.View {
 		default:
 			sb.WriteString(fmt.Sprintf("  %s %s\n",
 				label,
-				pendingStyle.Render("拉取 PR 列表..."),
+				pendingStyle.Render(locale.T("tui.sync.fetch")),
 			))
 		}
 	}
