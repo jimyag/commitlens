@@ -16,16 +16,18 @@ type Server struct {
 	syncer     *isync.Syncer
 	stats      []*cache.StatsData
 	repos      []string
+	rawCache   *cache.RawCache
 	frontendFS http.FileSystem
 }
 
-func New(assets embed.FS, syncer *isync.Syncer, stats []*cache.StatsData, repos []string) *Server {
+func New(assets embed.FS, syncer *isync.Syncer, stats []*cache.StatsData, repos []string, rawCache *cache.RawCache) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	s := &Server{
-		engine: gin.New(),
-		syncer: syncer,
-		stats:  stats,
-		repos:  repos,
+		engine:   gin.New(),
+		syncer:   syncer,
+		stats:    stats,
+		repos:    repos,
+		rawCache: rawCache,
 	}
 	s.mountFrontend(assets)
 	s.registerAPI()

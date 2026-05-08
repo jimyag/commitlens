@@ -11,10 +11,10 @@ import (
 // coAuthoredByLine 匹配 "Co-authored-by: ... <...>" 行，大小写不敏感，忽略每行首尾的空白
 var coAuthoredByLine = regexp.MustCompile(`(?i)^[ \t]*Co-authored-by:.*<([^>]+)>`)
 
-// uniquePRParticipants 返回该 PR 的参与者 GitHub 登录名：主作者 + 从 Co-authored-by 解析出的
+// PRParticipants 返回该 PR 的参与者 GitHub 登录名：主作者 + 从 Co-authored-by 解析出的
 // 合著者。同一用户在同一条目或多次 Co-authored-by 中只出现一次。顺序：先作者，再合著者
 // 按出现先后。
-func uniquePRParticipants(pr *gh.PR) []string {
+func PRParticipants(pr *gh.PR) []string {
 	seen := make(map[string]struct{}, 8+len(pr.Commits))
 	var out []string
 	add := func(login string) {

@@ -36,4 +36,26 @@ export const zh: Keys = {
   'chart.sub': '粒度: {g} · 与下方各贡献者同周期；悬停柱条查看数值；底栏滑块可横移长周期。',
   'chart.prOnTop': '柱顶 PR 数',
   'chart.tooltipLine': '{who}：<span style="font-weight:600">{value}</span> 个 PR',
+
+  'nav.dashboard': '趋势概览',
+  'nav.prs': 'PR 列表',
+
+  'filter.allUsers': '全部贡献者',
+
+  'prPage.back': '← 返回',
+  'prPage.allPRs': 'PR 列表',
+  'prPage.title': 'PR 列表 · {period}',
+  'prPage.filterAll': '全部贡献者',
+  'prPage.loading': '加载中...',
+  'prPage.empty': '该时间段内暂无 PR。',
+  'prPage.colRepo': '仓库',
+  'prPage.colPR': 'PR',
+  'prPage.colAuthors': '作者',
+  'prPage.colDate': '合并时间',
+  'prPage.colLines': '增删行',
+  'prPage.total': '{n} 个 PR',
+  'prPage.allPeriods': '全部时间',
+  'prPage.pagePrev': '← 上一页',
+  'prPage.pageNext': '下一页 →',
+  'prPage.pageOf': '第 {page} / {total} 页',
 }

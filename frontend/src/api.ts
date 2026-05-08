@@ -21,6 +21,18 @@ export interface StatsData {
   weekly: Record<string, WeeklyEntry>
 }
 
+export interface PRInfo {
+  repo: string
+  number: number
+  title: string
+  author: string
+  avatar_url: string
+  participants: string[]
+  merged_at: string
+  additions: number
+  deletions: number
+}
+
 export const api = {
   getRepos: () => axios.get<{ repos: string[] }>('/api/repos'),
   getStats: (repo?: string) =>
@@ -29,4 +41,6 @@ export const api = {
       : axios.get<{ stats: StatsData[] }>('/api/stats'),
   sync: (repo?: string) =>
     axios.post('/api/sync', null, { params: repo ? { repo } : {} }),
+  getPRs: (params: { repo?: string; from?: string; to?: string; login?: string; page?: number; per_page?: number }) =>
+    axios.get<{ prs: PRInfo[]; total: number; page: number; per_page: number }>('/api/prs', { params }),
 }

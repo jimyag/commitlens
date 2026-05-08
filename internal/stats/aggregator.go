@@ -16,7 +16,7 @@ func Aggregate(raw *cache.RawData) *cache.StatsData {
 	}
 
 	for _, pr := range raw.PRs {
-		participants := uniquePRParticipants(&pr)
+		participants := PRParticipants(&pr)
 		nc := len(pr.Commits)
 		// 主作者 + Co-authored-by 合著者；同 PR 内每人只计 1 次。PR/提交/增删行均计给每位参与者（协作 PR 的代码量在多人上可重复计）
 		for _, login := range participants {

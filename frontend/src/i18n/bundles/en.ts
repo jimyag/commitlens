@@ -32,6 +32,28 @@ export const en = {
     'Granularity: {g} · same periods in each row; hover a bar; bottom slider scrolls long ranges.',
   'chart.prOnTop': 'PR count on top',
   'chart.tooltipLine': '{who}: <span style="font-weight:600">{value}</span> PRs',
+
+  'nav.dashboard': 'Dashboard',
+  'nav.prs': 'PR List',
+
+  'filter.allUsers': 'All contributors',
+
+  'prPage.back': '← Back',
+  'prPage.allPRs': 'PR List',
+  'prPage.title': 'PRs · {period}',
+  'prPage.filterAll': 'All contributors',
+  'prPage.loading': 'Loading…',
+  'prPage.empty': 'No PRs found for this period.',
+  'prPage.colRepo': 'Repo',
+  'prPage.colPR': 'PR',
+  'prPage.colAuthors': 'Author(s)',
+  'prPage.colDate': 'Merged',
+  'prPage.colLines': 'Lines',
+  'prPage.total': '{n} PRs',
+  'prPage.allPeriods': 'All periods',
+  'prPage.pagePrev': '← Prev',
+  'prPage.pageNext': 'Next →',
+  'prPage.pageOf': 'Page {page} / {total}',
 } as const
 
 export type MessageKey = keyof typeof en

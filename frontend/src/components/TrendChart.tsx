@@ -1,12 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import type { EChartsOption } from 'echarts'
 import type { BarSeriesOption, GridComponentOption, XAXisComponentOption, YAXisComponentOption } from 'echarts'
 import ReactECharts from 'echarts-for-react'
 import type { MessageKey } from '../i18n/bundles/en'
 import { useI18n } from '../i18n/I18nContext'
 import type { ContributorStats, WeeklyEntry } from '../api'
+import { toPeriodKey, type Granularity } from '../utils/periodUtils'
 
-export type Granularity = 'week' | 'month' | 'quarter' | 'year'
+export type { Granularity }
 
 /** 与单页性能平衡；超出可在下方表格中查看 */
 const MAX_CONTRIBUTOR_CHARTS = 48
@@ -16,27 +17,9 @@ interface Props {
   granularity: Granularity
   /** 用于趋势图左侧头像、贡献者表格等 */
   contributors: Record<string, ContributorStats>
+  /** 点击柱子时的回调；login 为 undefined 表示总量柱 */
+  onBarClick?: (period: string, login: string | undefined) => void
 }
-
-function toPeriodKey(weekKey: string, gran: Granularity): string {
-  const m = weekKey.match(/^(\d{4})-W(\d{2})$/)
-  if (!m) return weekKey
-  const year = parseInt(m[1])
-  const week = parseInt(m[2])
-  if (gran === 'week') return weekKey
-  if (gran === 'year') return `${year}`
-  const jan4 = new Date(year, 0, 4)
-  const weekday = jan4.getDay() || 7
-  const monday = new Date(jan4)
-  monday.setDate(jan4.getDate() - weekday + 1)
-  const approx = new Date(monday)
-  approx.setDate(monday.getDate() + (week - 1) * 7)
-  const mo = approx.getMonth() + 1
-  if (gran === 'month') return `${year}-${String(mo).padStart(2, '0')}`
-  const quarter = Math.ceil(mo / 3)
-  return `${year}-Q${quarter}`
-}
-
 const BAR_COLOR_TOTAL = '#6366f1'
 const BAR_COLOR_PERSON = '#16a34a'
 const AXIS = '#6b7280'
@@ -62,11 +45,22 @@ const R_PAD = 16
 /** 全仓库图与下方各人图之间的空隙 */
 const GAP_AFTER_TOTAL = 44
 
-export function TrendChart({ weekly, granularity, contributors }: Props) {
+export function TrendChart({ weekly, granularity, contributors, onBarClick }: Props) {
   const { t, tf } = useI18n()
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
     () => buildTrendOption(weekly, granularity, contributors, { t, tf }),
     [weekly, granularity, contributors, t, tf],
+  )
+
+  const totalSeriesName = t('chart.totalSeries')
+  const handleBarClick = useCallback(
+    (params: { name?: string; seriesName?: string }) => {
+      const period = params.name
+      if (!period || !onBarClick) return
+      const login = params.seriesName === totalSeriesName ? undefined : params.seriesName
+      onBarClick(period, login)
+    },
+    [onBarClick, totalSeriesName],
   )
 
   if (!option) {
@@ -147,6 +141,7 @@ export function TrendChart({ weekly, granularity, contributors }: Props) {
           option={option as EChartsOption}
           style={{ width: '100%', height: heightPx, minWidth: 400 }}
           notMerge
+          onEvents={{ click: handleBarClick }}
         />
       </div>
     </div>

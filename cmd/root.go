@@ -94,7 +94,7 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		addr := fmt.Sprintf(":%d", port)
 		fmt.Printf("CommitLens web UI: http://localhost%s\n", addr)
-		srv := web.New(globalAssets, syncer, allStats, repos)
+		srv := web.New(globalAssets, syncer, allStats, repos, rawCache)
 		return srv.Run(addr)
 	}
 
