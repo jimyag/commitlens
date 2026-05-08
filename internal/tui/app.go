@@ -187,9 +187,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.globalFocus == 0 {
 				if a.globalRepoExpanded {
 					// Exclusively select this repo
-					a.globalRepoMulti = map[int]struct{}{a.globalRepoCursor: {}}
-					a.globalRepoExpanded = false
-					a.onGlobalFilterChange()
+					a.preserveLoginIdxDuring(func() {
+						a.globalRepoMulti = map[int]struct{}{a.globalRepoCursor: {}}
+						a.globalRepoExpanded = false
+					})
 				} else {
 					a.globalRepoExpanded = true
 				}
@@ -463,22 +464,45 @@ func trendFilteredStats(a *App) []*cache.StatsData {
 	return out
 }
 
-func (a *App) toggleGlobalRepo(idx int) {
-	if a.globalRepoMulti == nil {
-		a.globalRepoMulti = make(map[int]struct{})
-		for i := range a.repoNames {
-			a.globalRepoMulti[i] = struct{}{}
+func (a *App) preserveLoginIdxDuring(changeFn func()) {
+	oldLogins := a.availableGlobalLogins()
+	var oldLogin string
+	if a.globalLoginIdx >= 0 && a.globalLoginIdx < len(oldLogins) {
+		oldLogin = oldLogins[a.globalLoginIdx]
+	}
+
+	changeFn()
+
+	newLogins := a.availableGlobalLogins()
+	newIdx := 0
+	if oldLogin != "" && oldLogin != locale.T("tui.prlist.filterAll") {
+		for i, l := range newLogins {
+			if l == oldLogin {
+				newIdx = i
+				break
+			}
 		}
 	}
-	if _, ok := a.globalRepoMulti[idx]; ok {
-		if len(a.globalRepoMulti) > 1 {
-			delete(a.globalRepoMulti, idx)
-		}
-	} else {
-		a.globalRepoMulti[idx] = struct{}{}
-	}
-	a.globalLoginIdx = 0 // Reset login when repo changes
+	a.globalLoginIdx = newIdx
 	a.onGlobalFilterChange()
+}
+
+func (a *App) toggleGlobalRepo(idx int) {
+	a.preserveLoginIdxDuring(func() {
+		if a.globalRepoMulti == nil {
+			a.globalRepoMulti = make(map[int]struct{})
+			for i := range a.repoNames {
+				a.globalRepoMulti[i] = struct{}{}
+			}
+		}
+		if _, ok := a.globalRepoMulti[idx]; ok {
+			if len(a.globalRepoMulti) > 1 {
+				delete(a.globalRepoMulti, idx)
+			}
+		} else {
+			a.globalRepoMulti[idx] = struct{}{}
+		}
+	})
 }
 
 func (a *App) onGlobalFilterChange() {
