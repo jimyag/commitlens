@@ -61,7 +61,7 @@ func renderTrendView(a *App) string {
 	if a.globalFocus == 3 {
 		selIdx = a.trendPeriodCursor
 	}
-	totalChart := renderBarChart(periods, totalValues, chartWidth, 12, false, selIdx)
+	totalChart := renderBarChart(periods, totalValues, chartWidth, 12, false, selIdx, a.globalGranularity)
 
 	// 如果选中了具体贡献者，显示该贡献者的趋势
 	logins := a.availableGlobalLogins()
@@ -76,7 +76,7 @@ func renderTrendView(a *App) string {
 		for i, p := range periods {
 			personValues[i] = float64(periodData[p].byContributor[selectedLogin])
 		}
-		pChart := renderBarChart(periods, personValues, chartWidth, 8, true, selIdx)
+		pChart := renderBarChart(periods, personValues, chartWidth, 8, true, selIdx, a.globalGranularity)
 		personBlock = "\n" + fmt.Sprintf(locale.T("tui.trend.personTitle"), selectedLogin) + "\n" + pChart
 	}
 
@@ -260,51 +260,104 @@ func estimateBarWidth(n, chartW, gap int) int {
 	return (chartW - g) / n
 }
 
-func compactPeriod(p string) string {
-	if p == "" {
-		return "?"
-	}
-	if parts := strings.Split(p, "-"); len(parts) >= 2 {
-		y := parts[0]
-		if len(y) == 4 {
-			return y[2:4] + parts[1]
+func formatVerticalLabel(period string, gran int, barW int) []string {
+	if gran == 0 {
+		var year, week int
+		if n, _ := fmt.Sscanf(period, "%d-W%d", &year, &week); n == 2 {
+			jan4 := time.Date(year, 1, 4, 0, 0, 0, 0, time.UTC)
+			weekday := int(jan4.Weekday())
+			if weekday == 0 {
+				weekday = 7
+			}
+			monday := jan4.AddDate(0, 0, -weekday+1)
+			start := monday.AddDate(0, 0, (week-1)*7)
+			end := start.AddDate(0, 0, 6)
+
+			if barW >= 5 {
+				return []string{
+					fmt.Sprintf("%04d", year),
+					start.Format("01-02"),
+					"~",
+					end.Format("01-02"),
+				}
+			} else if barW >= 2 {
+				return []string{
+					fmt.Sprintf("%02d", year/100),
+					fmt.Sprintf("%02d", year%100),
+					start.Format("01"),
+					start.Format("02"),
+					"~",
+					end.Format("01"),
+					end.Format("02"),
+				}
+			} else {
+				s := fmt.Sprintf("W%02d", week)
+				var lines []string
+				for _, c := range s {
+					lines = append(lines, string(c))
+				}
+				return lines
+			}
 		}
 	}
-	if len(p) > 5 {
-		return p[:5]
+	
+	if barW >= len(period) {
+		return []string{period}
+	} else if barW >= 4 && len(period) == 7 { 
+		return []string{period[:4], period[5:]}
+	} else if barW >= 2 {
+		var lines []string
+		for i := 0; i < len(period); i += barW {
+			e := i + barW
+			if e > len(period) {
+				e = len(period)
+			}
+			lines = append(lines, period[i:e])
+		}
+		return lines
+	} else {
+		var lines []string
+		for _, c := range period {
+			lines = append(lines, string(c))
+		}
+		return lines
 	}
-	return p
 }
 
-// xAxisLabel 横轴标签：柱变窄时缩短，库会再按 barWidth 截断。
-func xAxisLabel(period string, i, n, barW int) string {
-	if barW >= 7 {
-		s := compactPeriod(period)
-		if len(s) > barW {
-			return s[:barW]
+func buildCustomLabels(periods []string, gran int, barW, barGap int) string {
+	var cols [][]string
+	maxLines := 0
+	for _, p := range periods {
+		lines := formatVerticalLabel(p, gran, barW)
+		if len(lines) > maxLines {
+			maxLines = len(lines)
 		}
-		return s
+		cols = append(cols, lines)
 	}
-	if barW >= 4 {
-		s := period
-		if len(s) > barW {
-			return s[len(s)-barW:]
+
+	var sb strings.Builder
+	for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
+		for pIdx, col := range cols {
+			s := ""
+			if lineIdx < len(col) {
+				s = col[lineIdx]
+			}
+			s = centerInWidth(s, barW)
+			styled := barLabelStyle.Render(s)
+			sb.WriteString(styled)
+			if pIdx < len(cols)-1 {
+				sb.WriteString(strings.Repeat(" ", barGap))
+			}
 		}
-		return s
-	}
-	if barW >= 2 {
-		s := fmt.Sprintf("%02d", i+1)
-		if len(s) > barW {
-			return s[:barW]
+		if lineIdx < maxLines-1 {
+			sb.WriteString("\n")
 		}
-		return s
 	}
-	return fmt.Sprintf("%d", i%10)
+	return sb.String()
 }
 
 func barDataFromPeriods(periods []string, values []float64, width, gap int, person bool, selIdx int) []barchart.BarData {
 	n := len(periods)
-	bw := estimateBarWidth(n, width, gap)
 	block := barValueStyle
 	if person {
 		block = barValueStylePerson
@@ -316,7 +369,7 @@ func barDataFromPeriods(periods []string, values []float64, width, gap int, pers
 			style = barValueStyleSelected
 		}
 		out = append(out, barchart.BarData{
-			Label: xAxisLabel(periods[i], i, n, bw),
+			Label: " ",
 			Values: []barchart.BarValue{
 				{Name: locale.T("tui.barchart.pr"), Value: values[i], Style: style},
 			},
@@ -325,8 +378,7 @@ func barDataFromPeriods(periods []string, values []float64, width, gap int, pers
 	return out
 }
 
-// renderBarChart 参考 github.com/NimbleMarkets/ntcharts examples/barchart/vertical：柱顶一行展示具体 PR 数，列间距由 pickBarGap 控制。
-func renderBarChart(periods []string, values []float64, width, height int, person bool, selIdx int) string {
+func renderBarChart(periods []string, values []float64, width, height int, person bool, selIdx int, gran int) string {
 	n := len(values)
 	if n == 0 {
 		return ""
@@ -339,13 +391,24 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 		barchart.WithBarGap(gap),
 	)
 	m.Draw()
+	
+	view := m.View()
+	lines := strings.Split(strings.TrimRight(view, "\n"), "\n")
+	if len(lines) > 0 {
+		lines = lines[:len(lines)-1]
+	}
+
 	cellW := m.BarWidth()
 	if cellW < 1 {
 		cellW = 1
 	}
 	g := m.BarGap()
+	
+	customLabels := buildCustomLabels(periods, gran, cellW, g)
+	lines = append(lines, customLabels)
+
 	topLine := prValuesLineAboveChart(values, cellW, g)
-	return locale.T("tui.bar.topPrCount") + "\n" + topLine + "\n" + m.View()
+	return locale.T("tui.bar.topPrCount") + "\n" + topLine + "\n" + strings.Join(lines, "\n")
 }
 
 type periodEntry struct {
