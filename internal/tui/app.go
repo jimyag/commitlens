@@ -37,12 +37,15 @@ type App struct {
 	err       error
 
 	// Global Filters
-	globalFocus        int              // 0=Repo, 1=Granularity, 2=Contributor, 3=ViewContent
-	globalRepoMulti    map[int]struct{} // nil means ALL, otherwise specific repos
-	globalRepoExpanded bool             // true if repo multi-select list is open
-	globalRepoCursor   int              // cursor for multi-select list
-	globalGranularity  int              // 0=Week, 1=Month, 2=Quarter, 3=Year
-	globalLoginIdx     int              // 0=ALL, 1..N
+	globalFocus         int              // 0=Repo, 1=Granularity, 2=Contributor, 3=ViewContent
+	globalRepoMulti     map[int]struct{} // nil means ALL, otherwise specific repos
+	globalRepoExpanded  bool             // true if repo multi-select list is open
+	globalRepoCursor    int              // cursor for multi-select list
+	globalGranularity   int              // 0=Week, 1=Month, 2=Quarter, 3=Year
+	globalLoginIdx      int              // 0=ALL, 1..N
+	globalLoginExpanded bool
+	globalLoginCursor   int
+	globalLoginSearch   string
 
 	// Repo view specific
 	repoViewSelected int
@@ -96,8 +99,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		s := msg.String()
+		
+		// Handle typing for search if expanded
+		if a.globalFocus == 2 && a.globalLoginExpanded && len(s) == 1 {
+			// Only alphanumeric or punctuation (printable)
+			c := s[0]
+			if c >= 32 && c <= 126 {
+				a.globalLoginSearch += s
+				a.globalLoginCursor = 0
+				return a, nil
+			}
+		}
+
 		switch s {
 		case "q", "ctrl+c":
+			if a.globalLoginExpanded {
+				// Don't quit if just typing 'q' in search
+				a.globalLoginSearch += "q"
+				a.globalLoginCursor = 0
+				return a, nil
+			}
 			return a, tea.Quit
 		case "tab":
 			if a.globalFocus == 3 {
@@ -115,7 +136,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.globalFocus != 0 {
 				a.globalRepoExpanded = false
 			}
+			if a.globalFocus != 2 {
+				a.globalLoginExpanded = false
+				a.globalLoginSearch = ""
+			}
 		case "1", "2", "3", "4":
+			if a.globalLoginExpanded {
+				a.globalLoginSearch += s
+				a.globalLoginCursor = 0
+				return a, nil
+			}
 			m := viewMode(s[0] - '1')
 			if m != a.mode {
 				a.mode = m
@@ -133,8 +163,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.mode == viewPRList {
 				a.refreshPRList()
 			}
-		case "esc", "backspace":
+		case "esc":
 			if a.globalRepoExpanded {
+				a.globalRepoExpanded = false
+			} else if a.globalLoginExpanded {
+				a.globalLoginExpanded = false
+				a.globalLoginSearch = ""
+			} else if a.mode == viewPRList {
+				a.mode = viewTrend
+			}
+		case "backspace", "delete":
+			if a.globalFocus == 2 && a.globalLoginExpanded {
+				if len(a.globalLoginSearch) > 0 {
+					a.globalLoginSearch = a.globalLoginSearch[:len(a.globalLoginSearch)-1]
+					a.globalLoginCursor = 0
+				}
+			} else if a.globalRepoExpanded {
 				a.globalRepoExpanded = false
 			} else if a.mode == viewPRList {
 				a.mode = viewTrend
@@ -149,6 +193,27 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					a.globalRepoExpanded = true
 				}
+			} else if a.globalFocus == 2 {
+				if a.globalLoginExpanded {
+					filtered := a.filteredLogins()
+					if a.globalLoginCursor >= 0 && a.globalLoginCursor < len(filtered) {
+						selected := filtered[a.globalLoginCursor]
+						all := a.availableGlobalLogins()
+						for i, l := range all {
+							if l == selected {
+								a.globalLoginIdx = i
+								break
+							}
+						}
+					}
+					a.globalLoginExpanded = false
+					a.globalLoginSearch = ""
+					a.onGlobalFilterChange()
+				} else {
+					a.globalLoginExpanded = true
+					a.globalLoginSearch = ""
+					a.globalLoginCursor = 0
+				}
 			} else if a.mode == viewTrend {
 				a.openPRListFromTrend()
 			}
@@ -159,14 +224,28 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					a.globalRepoExpanded = true
 				}
+			} else if a.globalFocus == 2 && a.globalLoginExpanded {
+				a.globalLoginSearch += " "
+				a.globalLoginCursor = 0
 			}
 		case "r":
+			if a.globalLoginExpanded {
+				a.globalLoginSearch += "r"
+				a.globalLoginCursor = 0
+				return a, nil
+			}
 			if !a.syncing {
 				a.syncing = true
 				return a, a.doSync()
 			}
 		case "up", "k":
-			if a.globalFocus == 0 && a.globalRepoExpanded {
+			if a.globalLoginExpanded {
+				if a.globalFocus == 2 {
+					if a.globalLoginCursor > 0 {
+						a.globalLoginCursor--
+					}
+				}
+			} else if a.globalFocus == 0 && a.globalRepoExpanded {
 				if a.globalRepoCursor > 0 {
 					a.globalRepoCursor--
 				}
@@ -182,7 +261,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "down", "j":
-			if a.globalFocus == 0 && a.globalRepoExpanded {
+			if a.globalLoginExpanded {
+				if a.globalFocus == 2 {
+					filtered := a.filteredLogins()
+					if a.globalLoginCursor < len(filtered)-1 {
+						a.globalLoginCursor++
+					}
+				}
+			} else if a.globalFocus == 0 && a.globalRepoExpanded {
 				if a.globalRepoCursor < len(a.repoNames)-1 {
 					a.globalRepoCursor++
 				}
@@ -204,9 +290,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.onGlobalFilterChange()
 				}
 			} else if a.globalFocus == 2 {
-				if a.globalLoginIdx > 0 {
-					a.globalLoginIdx--
-					a.onGlobalFilterChange()
+				if !a.globalLoginExpanded {
+					if a.globalLoginIdx > 0 {
+						a.globalLoginIdx--
+						a.onGlobalFilterChange()
+					}
 				}
 			} else if a.globalFocus == 3 {
 				if a.mode == viewTrend {
@@ -229,9 +317,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.onGlobalFilterChange()
 				}
 			} else if a.globalFocus == 2 {
-				if a.globalLoginIdx < len(a.availableGlobalLogins())-1 {
-					a.globalLoginIdx++
-					a.onGlobalFilterChange()
+				if !a.globalLoginExpanded {
+					if a.globalLoginIdx < len(a.availableGlobalLogins())-1 {
+						a.globalLoginIdx++
+						a.onGlobalFilterChange()
+					}
 				}
 			} else if a.globalFocus == 3 {
 				if a.mode == viewTrend {
@@ -317,6 +407,36 @@ func (a *App) renderGlobalFilters() string {
 			lines = append(lines, line)
 		}
 		return strings.Join(lines, "\n")
+	} else if a.globalLoginExpanded && a.globalFocus == 2 {
+		// Append login search list
+		lines := []string{bar, ""}
+		lines = append(lines, fmt.Sprintf("  Search: [ %s_ ]", a.globalLoginSearch))
+		filtered := a.filteredLogins()
+		if len(filtered) == 0 {
+			lines = append(lines, "  (No matches)")
+		} else {
+			// Calculate visible range to avoid making the screen too tall
+			start := 0
+			if a.globalLoginCursor >= 10 {
+				start = a.globalLoginCursor - 9
+			}
+			end := start + 10
+			if end > len(filtered) {
+				end = len(filtered)
+			}
+			for i := start; i < end; i++ {
+				l := filtered[i]
+				if i == a.globalLoginCursor {
+					lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> "+l))
+				} else {
+					lines = append(lines, "  "+l)
+				}
+			}
+			if end < len(filtered) {
+				lines = append(lines, fmt.Sprintf("  ... and %d more", len(filtered)-end))
+			}
+		}
+		return strings.Join(lines, "\n")
 	}
 
 	return bar
@@ -371,6 +491,21 @@ func (a *App) availableGlobalLogins() []string {
 	logins := contributorsSortedByPRCount(trendFilteredStats(a))
 	out := []string{locale.T("tui.prlist.filterAll")}
 	out = append(out, logins...)
+	return out
+}
+
+func (a *App) filteredLogins() []string {
+	all := a.availableGlobalLogins()
+	if a.globalLoginSearch == "" {
+		return all
+	}
+	search := strings.ToLower(a.globalLoginSearch)
+	var out []string
+	for _, l := range all {
+		if strings.Contains(strings.ToLower(l), search) {
+			out = append(out, l)
+		}
+	}
 	return out
 }
 

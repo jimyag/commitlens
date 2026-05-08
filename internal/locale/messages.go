@@ -16,7 +16,7 @@ var enMessages = map[string]string{
 	"tui.tab.repos":    "[Single repo]",
 	"tui.tab.trend":    "[Trends]",
 	"tui.tab.prlist":   "[PRs]",
-	"tui.header.hints": "        1-4/[]: tab  tab: focus  r: refresh  q: quit\nFilters: Enter: toggle/single select  Space: multi select  ←/→: change",
+	"tui.header.hints": "        1-4/[]: tab  tab: focus  r: refresh  q: quit\nFilters: Enter: toggle/select  Space: multi select  ←/→: change",
 
 	"tui.status.syncing": "State: syncing...",
 	"tui.status.error": "Error: %s",
@@ -90,7 +90,7 @@ var zhMessages = map[string]string{
 	"tui.tab.repos":    "[单仓库]",
 	"tui.tab.trend":    "[趋势]",
 	"tui.tab.prlist":   "[PR列表]",
-	"tui.header.hints": "        1-4/[]:切换  tab:切焦点  r:刷新  q:退出\n过滤器: Enter:展开/单选  空格:多选  ←/→:切换",
+	"tui.header.hints": "        1-4/[]:切换  tab:切焦点  r:刷新  q:退出\n过滤器: Enter:展开/选择  空格:多选  ←/→:切换",
 
 	"tui.status.syncing": "状态: 同步中...",
 	"tui.status.error": "错误: %s",
