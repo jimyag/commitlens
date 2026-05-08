@@ -12,8 +12,17 @@ import (
 
 func renderSummaryView(a *App) string {
 	merged := make(map[string]*cache.ContributorStats)
-	for _, s := range a.stats {
+	selectedLogins := a.availableGlobalLogins()
+	var filterLogin string
+	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(selectedLogins) {
+		filterLogin = selectedLogins[a.globalLoginIdx]
+	}
+
+	for _, s := range trendFilteredStats(a) {
 		for login, c := range s.Contributors {
+			if filterLogin != "" && login != filterLogin {
+				continue
+			}
 			if existing, ok := merged[login]; ok {
 				existing.PRCount += c.PRCount
 				existing.CommitCount += c.CommitCount

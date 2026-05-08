@@ -98,7 +98,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return srv.Run(addr)
 	}
 
-	return tui.Run(syncer, allStats, repos)
+	return tui.Run(syncer, allStats, repos, rawCache)
 }
 
 // runSync launches a bubbletea progress UI while syncing all repos concurrently.

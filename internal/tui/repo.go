@@ -16,7 +16,7 @@ func renderRepoView(a *App) string {
 	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	repoList := make([]string, len(a.repoNames))
 	for i, r := range a.repoNames {
-		if i == a.selectedRepo {
+		if i == a.repoViewSelected {
 			repoList[i] = selectedStyle.Render("> " + r)
 		} else {
 			repoList[i] = "  " + r
@@ -25,10 +25,10 @@ func renderRepoView(a *App) string {
 	left := strings.Join(repoList, "\n")
 
 	right := locale.T("tui.reposelect.nodata")
-	if a.selectedRepo < len(a.stats) {
-		s := a.stats[a.selectedRepo]
+	if a.repoViewSelected < len(a.stats) {
+		s := a.stats[a.repoViewSelected]
 		contributors := sortedContributors(s.Contributors)
-		right = fmt.Sprintf("%s\n%s", a.repoNames[a.selectedRepo], renderContributorTable(contributors))
+		right = fmt.Sprintf("%s\n%s", a.repoNames[a.repoViewSelected], renderContributorTable(contributors))
 	}
 
 	leftLines := strings.Split(left, "\n")

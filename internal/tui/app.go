@@ -2,11 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"sort"
+	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/locale"
+	"github.com/jimyag/commitlens/internal/stats"
 	isync "github.com/jimyag/commitlens/internal/sync"
 )
 
@@ -16,46 +20,66 @@ const (
 	viewSummary viewMode = iota
 	viewRepo
 	viewTrend
+	viewPRList
 )
 
 type syncDoneMsg struct{ err error }
 
-// trend 仓库列表与贡献者列表的焦点：0=仓库 1=贡献者
-const (
-	trendFocusRepo = iota
-	trendFocusContributors
-)
-
 type App struct {
-	mode                viewMode
-	stats               []*cache.StatsData
-	repoNames           []string
-	selectedRepo        int
-	selectedContributor int
-	granularity         int // 0=week 1=month 2=quarter 3=year
-	syncer              *isync.Syncer
-	syncing             bool
-	width               int
-	height              int
-	err                 error
-	// 趋势视图中按仓库筛数据：默认单仓；m 可切多选，多选时用 trendRepoMultiPick
-	trendListFocus   int
-	trendSelectMulti bool
-	trendOneRepo     int
-	trendRepoCursor  int
-	trendRepoMulti   map[int]struct{}
+	mode      viewMode
+	stats     []*cache.StatsData
+	repoNames []string
+	rawCache  *cache.RawCache
+	syncer    *isync.Syncer
+	syncing   bool
+	width     int
+	height    int
+	err       error
+
+	// Global Filters
+	globalFocus        int              // 0=Repo, 1=Granularity, 2=Contributor, 3=ViewContent
+	globalRepoMulti    map[int]struct{} // nil means ALL, otherwise specific repos
+	globalRepoExpanded bool             // true if repo multi-select list is open
+	globalRepoCursor   int              // cursor for multi-select list
+	globalGranularity  int              // 0=Week, 1=Month, 2=Quarter, 3=Year
+	globalLoginIdx     int              // 0=ALL, 1..N
+
+	// Repo view specific
+	repoViewSelected int
+
+	// Trend specific
 	trendHScroll      int // 趋势图柱区横向视口左偏移（rune 列）
 	trendLastPeriodN  int // 用于周期数变化时重置横滚
+	trendPeriodCursor int // 趋势图中当前选中的周期索引
+
+	// PR 列表视图状态
+	prListFocus     int // 0=Period, 1=Table
+	prListPeriodIdx int // 0=All, 1...N
+	prListPRs       []prItem
+	prListCursor    int
 }
 
-func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []string) *App {
+type prItem struct {
+	Repo         string
+	Number       int
+	Title        string
+	Author       string
+	Participants []string
+	MergedAt     time.Time
+	Additions    int
+	Deletions    int
+}
+
+func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []string, rawCache *cache.RawCache) *App {
 	return &App{
-		syncer:          syncer,
-		stats:           stats,
-		repoNames:       repos,
-		trendListFocus:  trendFocusRepo,
-		trendOneRepo:    0,
-		trendRepoCursor: 0,
+		syncer:            syncer,
+		stats:             stats,
+		repoNames:         repos,
+		rawCache:          rawCache,
+		globalFocus:       0,
+		globalGranularity: 0,
+		globalLoginIdx:    0,
+		prListFocus:       0,
 	}
 }
 
@@ -71,56 +95,158 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.mode == viewTrend && a.trendHScrollKey(msg) {
 			return a, nil
 		}
-		switch msg.String() {
+		s := msg.String()
+		switch s {
 		case "q", "ctrl+c":
 			return a, tea.Quit
 		case "tab":
-			if a.mode == viewTrend {
-				a.trendHScroll = 0
+			if a.globalFocus == 3 {
+				if a.mode == viewPRList {
+					a.prListFocus = (a.prListFocus + 1) % 2
+					if a.prListFocus == 0 {
+						a.globalFocus = 0
+					}
+				} else {
+					a.globalFocus = 0
+				}
+			} else {
+				a.globalFocus = (a.globalFocus + 1) % 4
 			}
-			a.mode = (a.mode + 1) % 3
+			if a.globalFocus != 0 {
+				a.globalRepoExpanded = false
+			}
+		case "1", "2", "3", "4":
+			m := viewMode(s[0] - '1')
+			if m != a.mode {
+				a.mode = m
+				if a.mode == viewPRList {
+					a.refreshPRList()
+				}
+			}
+		case "[":
+			a.mode = (a.mode + 3) % 4
+			if a.mode == viewPRList {
+				a.refreshPRList()
+			}
+		case "]":
+			a.mode = (a.mode + 1) % 4
+			if a.mode == viewPRList {
+				a.refreshPRList()
+			}
+		case "esc", "backspace":
+			if a.globalRepoExpanded {
+				a.globalRepoExpanded = false
+			} else if a.mode == viewPRList {
+				a.mode = viewTrend
+			}
+		case "enter":
+			if a.globalFocus == 0 {
+				if a.globalRepoExpanded {
+					// Exclusively select this repo
+					a.globalRepoMulti = map[int]struct{}{a.globalRepoCursor: {}}
+					a.globalRepoExpanded = false
+					a.onGlobalFilterChange()
+				} else {
+					a.globalRepoExpanded = true
+				}
+			} else if a.mode == viewTrend {
+				a.openPRListFromTrend()
+			}
+		case "space", " ":
+			if a.globalFocus == 0 {
+				if a.globalRepoExpanded {
+					a.toggleGlobalRepo(a.globalRepoCursor)
+				} else {
+					a.globalRepoExpanded = true
+				}
+			}
 		case "r":
 			if !a.syncing {
 				a.syncing = true
 				return a, a.doSync()
 			}
 		case "up", "k":
-			if a.mode == viewRepo && a.selectedRepo > 0 {
-				a.selectedRepo--
-			}
-			if a.mode == viewTrend {
-				a.trendViewUp()
+			if a.globalFocus == 0 && a.globalRepoExpanded {
+				if a.globalRepoCursor > 0 {
+					a.globalRepoCursor--
+				}
+			} else if a.globalFocus == 3 {
+				if a.mode == viewRepo {
+					if a.repoViewSelected > 0 {
+						a.repoViewSelected--
+					}
+				} else if a.mode == viewPRList {
+					if a.prListFocus == 1 && a.prListCursor > 0 {
+						a.prListCursor--
+					}
+				}
 			}
 		case "down", "j":
-			if a.mode == viewRepo && a.selectedRepo < len(a.repoNames)-1 {
-				a.selectedRepo++
-			}
-			if a.mode == viewTrend {
-				a.trendViewDown()
-			}
-		case " ":
-			if a.mode == viewTrend {
-				a.trendViewSpace()
-			}
-		case "m", "M":
-			if a.mode == viewTrend {
-				a.trendViewToggleMode()
-			}
-		case ",":
-			if a.mode == viewTrend {
-				a.trendListFocus = trendFocusRepo
-			}
-		case ".":
-			if a.mode == viewTrend {
-				a.trendListFocus = trendFocusContributors
+			if a.globalFocus == 0 && a.globalRepoExpanded {
+				if a.globalRepoCursor < len(a.repoNames)-1 {
+					a.globalRepoCursor++
+				}
+			} else if a.globalFocus == 3 {
+				if a.mode == viewRepo {
+					if a.repoViewSelected < len(a.repoNames)-1 {
+						a.repoViewSelected++
+					}
+				} else if a.mode == viewPRList {
+					if a.prListFocus == 1 && a.prListCursor < len(a.prListPRs)-1 {
+						a.prListCursor++
+					}
+				}
 			}
 		case "left", "h":
-			if a.granularity > 0 {
-				a.granularity--
+			if a.globalFocus == 1 {
+				if a.globalGranularity > 0 {
+					a.globalGranularity--
+					a.onGlobalFilterChange()
+				}
+			} else if a.globalFocus == 2 {
+				if a.globalLoginIdx > 0 {
+					a.globalLoginIdx--
+					a.onGlobalFilterChange()
+				}
+			} else if a.globalFocus == 3 {
+				if a.mode == viewTrend {
+					if a.trendPeriodCursor > 0 {
+						a.trendPeriodCursor--
+					}
+				} else if a.mode == viewPRList {
+					if a.prListFocus == 0 {
+						if a.prListPeriodIdx > 0 {
+							a.prListPeriodIdx--
+							a.refreshPRList()
+						}
+					}
+				}
 			}
 		case "right", "l":
-			if a.granularity < 3 {
-				a.granularity++
+			if a.globalFocus == 1 {
+				if a.globalGranularity < 3 {
+					a.globalGranularity++
+					a.onGlobalFilterChange()
+				}
+			} else if a.globalFocus == 2 {
+				if a.globalLoginIdx < len(a.availableGlobalLogins())-1 {
+					a.globalLoginIdx++
+					a.onGlobalFilterChange()
+				}
+			} else if a.globalFocus == 3 {
+				if a.mode == viewTrend {
+					maxP := len(sortedPeriodKeys(aggregatePeriods(a)))
+					if a.trendPeriodCursor < maxP-1 {
+						a.trendPeriodCursor++
+					}
+				} else if a.mode == viewPRList {
+					if a.prListFocus == 0 {
+						if a.prListPeriodIdx < len(a.availablePRListPeriods())-1 {
+							a.prListPeriodIdx++
+							a.refreshPRList()
+						}
+					}
+				}
 			}
 		}
 	case syncDoneMsg:
@@ -130,20 +256,219 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+var (
+	globalFilterBoxStyle       = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
+	globalFilterBoxActiveStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("205"))
+	globalFilterLabelStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	globalFilterValueStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
+)
+
+func (a *App) renderGlobalFilters() string {
+	// Repo filter
+	repoVal := locale.T("tui.prlist.filterAll")
+	if a.globalRepoMulti != nil {
+		if len(a.globalRepoMulti) == 1 {
+			for idx := range a.globalRepoMulti {
+				repoVal = a.repoNames[idx]
+			}
+		} else {
+			repoVal = fmt.Sprintf(locale.T("tui.scope.multifmt"), len(a.globalRepoMulti))
+		}
+	}
+	repoStyle := globalFilterBoxStyle
+	if a.globalFocus == 0 {
+		repoStyle = globalFilterBoxActiveStyle
+	}
+	repoFilter := repoStyle.Render(fmt.Sprintf("%s: %s", globalFilterLabelStyle.Render(locale.T("tui.focus.repo")), globalFilterValueStyle.Render(repoVal)))
+
+	// Granularity filter
+	granVal := locale.GranularityLabel(a.globalGranularity)
+	granStyle := globalFilterBoxStyle
+	if a.globalFocus == 1 {
+		granStyle = globalFilterBoxActiveStyle
+	}
+	granFilter := granStyle.Render(fmt.Sprintf("%s: < %s >", globalFilterLabelStyle.Render(locale.T("granularity.period")), globalFilterValueStyle.Render(granVal)))
+
+	// Contributor filter
+	logins := a.availableGlobalLogins()
+	loginVal := logins[a.globalLoginIdx]
+	loginStyle := globalFilterBoxStyle
+	if a.globalFocus == 2 {
+		loginStyle = globalFilterBoxActiveStyle
+	}
+	loginFilter := loginStyle.Render(fmt.Sprintf("%s: < %s >", globalFilterLabelStyle.Render(locale.T("tui.table.contributor")), globalFilterValueStyle.Render(loginVal)))
+
+	bar := lipgloss.JoinHorizontal(lipgloss.Top, repoFilter, "  ", granFilter, "  ", loginFilter)
+
+	if a.globalRepoExpanded && a.globalFocus == 0 {
+		// Append repo list
+		lines := []string{bar, ""}
+		for i, name := range a.repoNames {
+			mark := "[ ] "
+			if a.globalRepoMulti == nil {
+				mark = "[x] "
+			} else if _, ok := a.globalRepoMulti[i]; ok {
+				mark = "[x] "
+			}
+			line := "  " + mark + name
+			if i == a.globalRepoCursor {
+				line = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + mark + name)
+			}
+			lines = append(lines, line)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	return bar
+}
+
+// trendFilteredStats 趋势图当前统计范围：默认全仓库；多选为 globalRepoMulti 内仓库的并集。
+func trendFilteredStats(a *App) []*cache.StatsData {
+	n := len(a.stats)
+	if n == 0 {
+		return nil
+	}
+	if a.globalRepoMulti == nil {
+		return a.stats
+	}
+	var out []*cache.StatsData
+	for i := 0; i < n; i++ {
+		if _, ok := a.globalRepoMulti[i]; ok {
+			out = append(out, a.stats[i])
+		}
+	}
+	if len(out) == 0 {
+		return a.stats
+	}
+	return out
+}
+
+func (a *App) toggleGlobalRepo(idx int) {
+	if a.globalRepoMulti == nil {
+		a.globalRepoMulti = make(map[int]struct{})
+		for i := range a.repoNames {
+			a.globalRepoMulti[i] = struct{}{}
+		}
+	}
+	if _, ok := a.globalRepoMulti[idx]; ok {
+		if len(a.globalRepoMulti) > 1 {
+			delete(a.globalRepoMulti, idx)
+		}
+	} else {
+		a.globalRepoMulti[idx] = struct{}{}
+	}
+	a.globalLoginIdx = 0 // Reset login when repo changes
+	a.onGlobalFilterChange()
+}
+
+func (a *App) onGlobalFilterChange() {
+	if a.mode == viewPRList {
+		a.refreshPRList()
+	}
+}
+
+func (a *App) availableGlobalLogins() []string {
+	logins := contributorsSortedByPRCount(trendFilteredStats(a))
+	out := []string{locale.T("tui.prlist.filterAll")}
+	out = append(out, logins...)
+	return out
+}
+
+func (a *App) availablePRListPeriods() []string {
+	periods := sortedPeriodKeys(aggregatePeriods(a))
+	out := []string{locale.T("tui.prlist.filterAll")}
+	out = append(out, periods...)
+	return out
+}
+
+func (a *App) openPRListFromTrend() {
+	periods := sortedPeriodKeys(aggregatePeriods(a))
+	if len(periods) == 0 || a.trendPeriodCursor >= len(periods) {
+		return
+	}
+	period := periods[a.trendPeriodCursor]
+
+	a.mode = viewPRList
+	a.globalFocus = 3
+	a.prListFocus = 1 // Focus on table
+
+	// Find indices for the selected period
+	a.prListPeriodIdx = 0
+	for i, p := range a.availablePRListPeriods() {
+		if p == period {
+			a.prListPeriodIdx = i
+			break
+		}
+	}
+	a.refreshPRList()
+}
+
+func (a *App) refreshPRList() {
+	periods := a.availablePRListPeriods()
+
+	var period string
+	if a.prListPeriodIdx > 0 && a.prListPeriodIdx < len(periods) {
+		period = periods[a.prListPeriodIdx]
+	}
+
+	logins := a.availableGlobalLogins()
+	var login string
+	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
+		login = logins[a.globalLoginIdx]
+	}
+
+	a.prListPRs = a.fetchPRs(period, login)
+	a.prListCursor = 0
+}
+
+func (a *App) fetchPRs(period, login string) []prItem {
+	var out []prItem
+	stats_ := trendFilteredStats(a)
+	for _, s := range stats_ {
+		raw, err := a.rawCache.Load(s.Repo)
+		if err != nil {
+			continue
+		}
+		for _, pr := range raw.PRs {
+			if period != "" {
+				if toPeriodKey(stats.WeekKey(pr.MergedAt), a.globalGranularity) != period {
+					continue
+				}
+			}
+			if login != "" {
+				found := false
+				for _, p := range stats.PRParticipants(&pr) {
+					if p == login {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			}
+			out = append(out, prItem{
+				Repo:         s.Repo,
+				Number:       pr.Number,
+				Title:        pr.Title,
+				Author:       pr.Author,
+				Participants: stats.PRParticipants(&pr),
+				MergedAt:     pr.MergedAt,
+				Additions:    pr.Additions,
+				Deletions:    pr.Deletions,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].MergedAt.After(out[j].MergedAt)
+	})
+	return out
+}
+
 func (a *App) doSync() tea.Cmd {
 	return func() tea.Msg {
 		return syncDoneMsg{err: nil}
 	}
-}
-
-func (a *App) maxContributors() int {
-	seen := make(map[string]struct{})
-	for _, s := range a.stats {
-		for login := range s.Contributors {
-			seen[login] = struct{}{}
-		}
-	}
-	return len(seen)
 }
 
 func (a *App) nRepos() int { return len(a.repoNames) }
@@ -187,111 +512,9 @@ func (a *App) trendHScrollKey(msg tea.KeyPressMsg) bool {
 	return false
 }
 
-func (a *App) trendViewUp() {
-	if a.trendListFocus == trendFocusRepo {
-		if a.trendSelectMulti {
-			if a.trendRepoCursor > 0 {
-				a.trendRepoCursor--
-			}
-		} else {
-			if a.trendOneRepo > 0 {
-				a.trendOneRepo--
-				a.trendRepoCursor = a.trendOneRepo
-			}
-		}
-		return
-	}
-	if a.selectedContributor > 0 {
-		a.selectedContributor--
-	}
-}
-
-func (a *App) trendViewDown() {
-	if a.trendListFocus == trendFocusRepo {
-		max := a.nRepos() - 1
-		if a.trendSelectMulti {
-			if a.trendRepoCursor < max {
-				a.trendRepoCursor++
-			}
-		} else {
-			if a.trendOneRepo < max {
-				a.trendOneRepo++
-				a.trendRepoCursor = a.trendOneRepo
-			}
-		}
-		return
-	}
-	maxC := a.maxTrendContributors()
-	if a.selectedContributor < maxC-1 {
-		a.selectedContributor++
-	}
-}
-
-func (a *App) trendViewSpace() {
-	if a.trendListFocus != trendFocusRepo || !a.trendSelectMulti {
-		return
-	}
-	if a.trendRepoMulti == nil {
-		return
-	}
-	_, in := a.trendRepoMulti[a.trendRepoCursor]
-	if in {
-		if len(a.trendRepoMulti) <= 1 {
-			return
-		}
-		delete(a.trendRepoMulti, a.trendRepoCursor)
-	} else {
-		a.trendRepoMulti[a.trendRepoCursor] = struct{}{}
-	}
-}
-
-func (a *App) trendViewToggleMode() {
-	if a.nRepos() == 0 {
-		return
-	}
-	if !a.trendSelectMulti {
-		a.trendSelectMulti = true
-		if a.trendRepoMulti == nil {
-			a.trendRepoMulti = make(map[int]struct{})
-		} else {
-			for k := range a.trendRepoMulti {
-				delete(a.trendRepoMulti, k)
-			}
-		}
-		i := a.trendOneRepo
-		if i < 0 {
-			i = 0
-		} else if i > a.nRepos()-1 {
-			i = a.nRepos() - 1
-		}
-		a.trendRepoMulti[i] = struct{}{}
-		if a.trendRepoCursor < 0 || a.trendRepoCursor > a.nRepos()-1 {
-			a.trendRepoCursor = i
-		}
-		return
-	}
-	a.trendSelectMulti = false
-	first := -1
-	for j := 0; j < a.nRepos(); j++ {
-		if _, ok := a.trendRepoMulti[j]; ok {
-			if first < 0 {
-				first = j
-			}
-		}
-	}
-	if first < 0 {
-		first = 0
-	}
-	a.trendOneRepo = first
-	a.trendRepoCursor = first
-}
-
-func (a *App) maxTrendContributors() int {
-	return len(contributorLoginsForTrend(a))
-}
-
 func (a *App) View() tea.View {
 	header := a.renderHeader()
+	filters := a.renderGlobalFilters()
 	var body string
 	switch a.mode {
 	case viewSummary:
@@ -300,15 +523,22 @@ func (a *App) View() tea.View {
 		body = a.renderRepo()
 	case viewTrend:
 		body = a.renderTrend()
+	case viewPRList:
+		body = a.renderPRList()
 	}
 	status := a.renderStatus()
-	v := tea.NewView(fmt.Sprintf("%s\n%s\n%s", header, body, status))
+	v := tea.NewView(fmt.Sprintf("%s\n%s\n\n%s\n%s", header, filters, body, status))
 	v.AltScreen = true
 	return v
 }
 
 func (a *App) renderHeader() string {
-	tabs := []string{locale.T("tui.tab.summary"), locale.T("tui.tab.repos"), locale.T("tui.tab.trend")}
+	tabs := []string{
+		locale.T("tui.tab.summary"),
+		locale.T("tui.tab.repos"),
+		locale.T("tui.tab.trend"),
+		locale.T("tui.tab.prlist"),
+	}
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	line := ""
 	for i, t := range tabs {
@@ -335,8 +565,8 @@ func (a *App) renderSummary() string { return renderSummaryView(a) }
 func (a *App) renderRepo() string    { return renderRepoView(a) }
 func (a *App) renderTrend() string   { return renderTrendView(a) }
 
-func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []string) error {
-	app := New(syncer, stats, repos)
+func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []string, rawCache *cache.RawCache) error {
+	app := New(syncer, stats, repos, rawCache)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err

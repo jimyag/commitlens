@@ -17,10 +17,7 @@ import (
 )
 
 func renderTrendView(a *App) string {
-	normalizeTrendState(a)
-
-	scopeLine := formatTrendScopeLine(a)
-	granLabel := fmt.Sprintf(locale.T("tui.trend.hint"), scopeLine, locale.GranularityLabel(a.granularity))
+	granLabel := locale.T("tui.trend.hint")
 
 	periodData := aggregatePeriods(a)
 	periods := sortedPeriodKeys(periodData)
@@ -42,99 +39,64 @@ func renderTrendView(a *App) string {
 
 	// 合并 PR：竖向条形图（ntcharts barchart，同 examples/barchart/vertical）+ 各点 PR 数
 	chartTitle := locale.T("tui.mergedPrTrend")
-	if a.nRepos() > 0 {
-		if a.trendSelectMulti {
-			chartTitle = fmt.Sprintf(locale.T("tui.mergedNReposFmt"), countTrendSelectedRepos(a))
+	if a.globalRepoMulti != nil {
+		if len(a.globalRepoMulti) == 1 {
+			for idx := range a.globalRepoMulti {
+				chartTitle = fmt.Sprintf(locale.T("tui.repoPrTrend"), a.repoNames[idx])
+			}
 		} else {
-			chartTitle = fmt.Sprintf(locale.T("tui.repoPrTrend"), a.repoNames[a.trendOneRepo])
+			chartTitle = fmt.Sprintf(locale.T("tui.mergedNReposFmt"), len(a.globalRepoMulti))
 		}
 	}
+
+	if a.globalFocus == 3 {
+		chartTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + chartTitle)
+	}
+
 	totalValues := make([]float64, len(periods))
 	for i, p := range periods {
 		totalValues[i] = float64(periodData[p].total)
 	}
-	totalChart := renderBarChart(periods, totalValues, chartWidth, 8, false)
+	selIdx := -1
+	if a.globalFocus == 3 {
+		selIdx = a.trendPeriodCursor
+	}
+	totalChart := renderBarChart(periods, totalValues, chartWidth, 12, false, selIdx)
 
-	// 贡献者：当前范围内按 PR 数降序
-	allLogins := contributorLoginsForTrend(a)
-
+	// 如果选中了具体贡献者，显示该贡献者的趋势
+	logins := a.availableGlobalLogins()
 	var selectedLogin string
-	if len(allLogins) > 0 && a.selectedContributor < len(allLogins) {
-		selectedLogin = allLogins[a.selectedContributor]
+	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
+		selectedLogin = logins[a.globalLoginIdx]
 	}
 
-	// 贡献者列表：竖向排列，高亮当前选中项
-	sel := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
-	var loginLines []string
-	for i, l := range allLogins {
-		if i == a.selectedContributor {
-			loginLines = append(loginLines, sel.Render("> "+l))
-		} else {
-			loginLines = append(loginLines, "  "+l)
-		}
-	}
-
-	// 左右分栏：左贡献者列表、右个人 PR 柱图（同一行，宽度见 trendContributorLayout）
-	leftW, rightW, gutter := trendContributorLayout(vpW)
 	personBlock := ""
 	if selectedLogin != "" {
 		personValues := make([]float64, len(periods))
 		for i, p := range periods {
 			personValues[i] = float64(periodData[p].byContributor[selectedLogin])
 		}
-		personCanvasW := trendChartCanvasW(len(periods), rightW)
-		pChart := renderBarChart(periods, personValues, personCanvasW, 6, true)
-		personBlock = fmt.Sprintf(locale.T("tui.trend.personTitle"), selectedLogin) + "\n" + pChart
-	} else {
-		personBlock = ""
+		pChart := renderBarChart(periods, personValues, chartWidth, 8, true, selIdx)
+		personBlock = "\n" + fmt.Sprintf(locale.T("tui.trend.personTitle"), selectedLogin) + "\n" + pChart
 	}
 
-	block1 := chartTitle + "\n" + totalChart
+	block1 := chartTitle + "\n" + totalChart + personBlock
 	max1 := trendHScrollMaxForBlock(block1, vpW)
-	max2 := 0
-	if personBlock != "" {
-		max2 = trendHScrollMaxForBlock(personBlock, rightW)
-	}
 	maxOff := max1
-	if max2 > maxOff {
-		maxOff = max2
-	}
 	if a.trendHScroll > maxOff {
 		a.trendHScroll = maxOff
 	}
+
 	clip1 := block1
 	if maxOff > 0 {
 		st := trendScrollStatusLine(a.trendHScroll, maxOff, vpW)
-		if max1 > 0 {
-			clip1 = st + "\n" + clipViewHorizontal(block1, a.trendHScroll, vpW)
-		} else {
-			clip1 = st + "\n" + block1
-		}
+		clip1 = st + "\n" + clipViewHorizontal(block1, a.trendHScroll, vpW)
 	}
-	clipPerson := personBlock
-	if personBlock != "" && maxOff > 0 {
-		clipPerson = clipViewHorizontal(personBlock, a.trendHScroll, rightW)
-	}
-
-	contributorBlock := locale.T("tui.trend.contributorHeader") + "\n" + strings.Join(loginLines, "\n")
-	leftCol := lipgloss.NewStyle().Width(leftW).Render(contributorBlock)
-	var rightCol string
-	if selectedLogin == "" {
-		rightCol = lipgloss.NewStyle().Width(rightW).Foreground(lipgloss.Color("240")).Render(locale.T("tui.trend.selectPersonHint"))
-	} else {
-		rightCol = clipPerson
-	}
-	gap := lipgloss.NewStyle().Width(gutter).Render(strings.Repeat(" ", gutter))
-	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, gap, rightCol)
 
 	return strings.Join([]string{
 		granLabel,
 		"",
-		renderRepoPanel(a),
-		"",
 		clip1,
-		"",
-		bottomRow,
 	}, "\n")
 }
 
@@ -146,32 +108,9 @@ var (
 	barValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("9"))
 	// 个人柱色（绿块），与示例中 Name2 系列一致
 	barValueStylePerson = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Background(lipgloss.Color("2"))
+	// 选中柱色（蓝块）
+	barValueStyleSelected = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Background(lipgloss.Color("12"))
 )
-
-// trendContributorLayout 将一行分为「贡献者 | 个人 PR 柱图」；gutter 为中间间隔列数。
-func trendContributorLayout(vpW int) (leftW, rightW, gutter int) {
-	gutter = 2
-	if vpW < 1 {
-		vpW = 80
-	}
-	leftW = 30
-	if vpW < 64 {
-		leftW = 22
-	}
-	rightW = vpW - leftW - gutter
-	if rightW < 14 {
-		rightW = 14
-		leftW = vpW - gutter - rightW
-		if leftW < 12 {
-			leftW = 12
-			rightW = vpW - leftW - gutter
-			if rightW < 10 {
-				rightW = 10
-			}
-		}
-	}
-	return leftW, rightW, gutter
-}
 
 // trendChartCanvasW 周期多时让柱图逻辑宽度超过视口，便于横滚阅读；否则用视口宽即可。
 func trendChartCanvasW(periodN, viewW int) int {
@@ -363,7 +302,7 @@ func xAxisLabel(period string, i, n, barW int) string {
 	return fmt.Sprintf("%d", i%10)
 }
 
-func barDataFromPeriods(periods []string, values []float64, width, gap int, person bool) []barchart.BarData {
+func barDataFromPeriods(periods []string, values []float64, width, gap int, person bool, selIdx int) []barchart.BarData {
 	n := len(periods)
 	bw := estimateBarWidth(n, width, gap)
 	block := barValueStyle
@@ -372,10 +311,14 @@ func barDataFromPeriods(periods []string, values []float64, width, gap int, pers
 	}
 	out := make([]barchart.BarData, 0, n)
 	for i := 0; i < n; i++ {
+		style := block
+		if i == selIdx {
+			style = barValueStyleSelected
+		}
 		out = append(out, barchart.BarData{
 			Label: xAxisLabel(periods[i], i, n, bw),
 			Values: []barchart.BarValue{
-				{Name: locale.T("tui.barchart.pr"), Value: values[i], Style: block},
+				{Name: locale.T("tui.barchart.pr"), Value: values[i], Style: style},
 			},
 		})
 	}
@@ -383,13 +326,13 @@ func barDataFromPeriods(periods []string, values []float64, width, gap int, pers
 }
 
 // renderBarChart 参考 github.com/NimbleMarkets/ntcharts examples/barchart/vertical：柱顶一行展示具体 PR 数，列间距由 pickBarGap 控制。
-func renderBarChart(periods []string, values []float64, width, height int, person bool) string {
+func renderBarChart(periods []string, values []float64, width, height int, person bool, selIdx int) string {
 	n := len(values)
 	if n == 0 {
 		return ""
 	}
 	gap := pickBarGap(n, width)
-	data := barDataFromPeriods(periods, values, width, gap, person)
+	data := barDataFromPeriods(periods, values, width, gap, person, selIdx)
 	m := barchart.New(width, height,
 		barchart.WithDataSet(data),
 		barchart.WithStyles(barAxisStyle, barLabelStyle),
@@ -405,141 +348,6 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 	return locale.T("tui.bar.topPrCount") + "\n" + topLine + "\n" + m.View()
 }
 
-func formatTrendScopeLine(a *App) string {
-	if a.nRepos() == 0 {
-		return locale.T("tui.scope.norepos")
-	}
-	if !a.trendSelectMulti {
-		return locale.T("tui.scope.single") + a.repoNames[a.trendOneRepo]
-	}
-	return fmt.Sprintf(locale.T("tui.scope.multifmt"), countTrendSelectedRepos(a))
-}
-
-func countTrendSelectedRepos(a *App) int {
-	if !a.trendSelectMulti {
-		return 1
-	}
-	if a.trendRepoMulti == nil {
-		return 0
-	}
-	return len(a.trendRepoMulti)
-}
-
-// trendFilteredStats 趋势图当前统计范围：默认仅 trendOneRepo；多选为 trendRepoMulti 内仓库的并集。
-func trendFilteredStats(a *App) []*cache.StatsData {
-	n := len(a.stats)
-	if n == 0 {
-		return nil
-	}
-	if !a.trendSelectMulti {
-		i := a.trendOneRepo
-		if i < 0 {
-			i = 0
-		} else if i >= n {
-			i = n - 1
-		}
-		return []*cache.StatsData{a.stats[i]}
-	}
-	if a.trendRepoMulti == nil {
-		return []*cache.StatsData{a.stats[0]}
-	}
-	var out []*cache.StatsData
-	for i := 0; i < n; i++ {
-		if _, ok := a.trendRepoMulti[i]; ok {
-			out = append(out, a.stats[i])
-		}
-	}
-	if len(out) == 0 {
-		return []*cache.StatsData{a.stats[0]}
-	}
-	return out
-}
-
-func contributorLoginsForTrend(a *App) []string {
-	return contributorsSortedByPRCount(trendFilteredStats(a))
-}
-
-func normalizeTrendState(a *App) {
-	n := a.nRepos()
-	if n == 0 {
-		a.selectedContributor = 0
-		return
-	}
-	if a.trendOneRepo < 0 {
-		a.trendOneRepo = 0
-	} else if a.trendOneRepo > n-1 {
-		a.trendOneRepo = n - 1
-	}
-	if a.trendRepoCursor < 0 {
-		a.trendRepoCursor = 0
-	} else if a.trendRepoCursor > n-1 {
-		a.trendRepoCursor = n - 1
-	}
-	if a.trendSelectMulti {
-		if a.trendRepoMulti == nil {
-			a.trendRepoMulti = make(map[int]struct{})
-		}
-		if len(a.trendRepoMulti) == 0 {
-			a.trendRepoMulti[a.trendOneRepo] = struct{}{}
-		}
-	}
-	if a.trendListFocus != trendFocusRepo && a.trendListFocus != trendFocusContributors {
-		a.trendListFocus = trendFocusRepo
-	}
-	m := len(contributorLoginsForTrend(a))
-	if m == 0 {
-		a.selectedContributor = 0
-		return
-	}
-	if a.selectedContributor >= m {
-		a.selectedContributor = m - 1
-	}
-	if a.selectedContributor < 0 {
-		a.selectedContributor = 0
-	}
-}
-
-func renderRepoPanel(a *App) string {
-	n := a.nRepos()
-	if n == 0 {
-		return locale.T("tui.repoPanel.noconfig")
-	}
-	sel := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
-	mode := locale.T("tui.repoPanel.modeSingle")
-	if a.trendSelectMulti {
-		mode = locale.T("tui.repoPanel.modeMulti")
-	}
-	focus := locale.T("tui.focus.contributor")
-	if a.trendListFocus == trendFocusRepo {
-		focus = locale.T("tui.focus.repo")
-	}
-	header := fmt.Sprintf(locale.T("tui.repoPanel.header"), focus, mode)
-	lines := []string{header}
-	for i, name := range a.repoNames {
-		cursor := a.trendRepoCursor == i && a.trendListFocus == trendFocusRepo
-		var mark string
-		if a.trendSelectMulti {
-			if a.trendRepoMulti != nil {
-				if _, ok := a.trendRepoMulti[i]; ok {
-					mark = "[x] "
-				} else {
-					mark = "[ ] "
-				}
-			}
-		} else if i == a.trendOneRepo {
-			mark = "• "
-		} else {
-			mark = "  "
-		}
-		if cursor {
-			lines = append(lines, sel.Render("> "+mark+name))
-		} else {
-			lines = append(lines, "  "+mark+name)
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 type periodEntry struct {
 	total         int
 	byContributor map[string]int
@@ -549,7 +357,7 @@ func aggregatePeriods(a *App) map[string]*periodEntry {
 	result := make(map[string]*periodEntry)
 	for _, s := range trendFilteredStats(a) {
 		for weekKey, w := range s.Weekly {
-			period := toPeriodKey(weekKey, a.granularity)
+			period := toPeriodKey(weekKey, a.globalGranularity)
 			if _, ok := result[period]; !ok {
 				result[period] = &periodEntry{byContributor: make(map[string]int)}
 			}
