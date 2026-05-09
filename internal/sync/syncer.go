@@ -109,21 +109,11 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 		return fmt.Errorf("load raw cache: %w", err)
 	}
 
-	// Lazy Fetch: if updated within the last 5 minutes, skip git fetch.
-	skipFetch := false
-	if !raw.LastUpdated.IsZero() && time.Since(raw.LastUpdated) < 5*time.Minute {
-		skipFetch = true
-	}
-
 	if onProgress != nil {
-		log := "ensuring local repository..."
-		if skipFetch {
-			log = "using local repository (lazy mode)..."
-		}
-		onProgress(FetchProgress{Log: log})
+		onProgress(FetchProgress{Log: "ensuring local repository..."})
 	}
 	
-	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, skipFetch)
+	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, false)
 	if err != nil {
 		return fmt.Errorf("ensure repo failed: %w", err)
 	}
