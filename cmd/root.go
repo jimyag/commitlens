@@ -10,6 +10,7 @@ import (
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
 	"github.com/jimyag/commitlens/internal/locale"
+	"github.com/jimyag/commitlens/internal/stats"
 	isync "github.com/jimyag/commitlens/internal/sync"
 	"github.com/jimyag/commitlens/internal/tui"
 	"github.com/jimyag/commitlens/internal/web"
@@ -75,24 +76,30 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	var allStats []*cache.StatsData
-	hasCache := false
-	for _, repoName := range repoNames {
-		s, err := statsCache.Load(repoName)
-		if err == nil && len(s.Contributors) > 0 {
+	hasRawCache := false
+	for _, repo := range repos {
+		repoID := repo.ID()
+		raw, err := rawCache.Load(repoID)
+		if err == nil && len(raw.Commits) > 0 {
+			// Always re-aggregate from raw data to respect latest userMap config
+			s := stats.Aggregate(raw, cfg)
+			_ = statsCache.Save(s)
 			allStats = append(allStats, s)
-			hasCache = true
+			hasRawCache = true
 		} else {
-			allStats = append(allStats, &cache.StatsData{Repo: repoName})
+			allStats = append(allStats, &cache.StatsData{Repo: repoID})
 		}
 	}
 
-	// Only run blocking sync UI if we have no cached data at all.
-	if !hasCache {
+	// Only run blocking sync UI if we have no raw cached data at all.
+	if !hasRawCache {
 		runSync(cmd.Context(), syncer, repos)
-		// Reload stats after sync
+		// Reload and aggregate after sync
 		allStats = nil
-		for _, repoName := range repoNames {
-			s, _ := statsCache.Load(repoName)
+		for _, repo := range repos {
+			raw, _ := rawCache.Load(repo.ID())
+			s := stats.Aggregate(raw, cfg)
+			_ = statsCache.Save(s)
 			allStats = append(allStats, s)
 		}
 	}

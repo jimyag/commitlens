@@ -42,14 +42,15 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 			participants = []string{commit.Author}
 		}
 
-		// Map to canonical names and deduplicate within this commit
-		canonicalParticipants := make(map[string]struct{})
+		// Map to canonical names and deduplicate within this commit.
+		// Use a temporary map to ensure each canonical person is only counted ONCE per commit.
+		uniqueInCommit := make(map[string]struct{})
 		for _, p := range participants {
-			canonicalParticipants[resolveName(p)] = struct{}{}
+			uniqueInCommit[resolveName(p)] = struct{}{}
 		}
 
-		for login := range canonicalParticipants {
-			avatar := "" // We don't have avatar URLs from pure git log easily.
+		for login := range uniqueInCommit {
+			avatar := "" // Avatar logic remains minimal for now.
 			c := getOrCreate(result.Contributors, login, avatar)
 			c.CommitCount++
 			c.Additions += commit.Additions
@@ -59,7 +60,7 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 		week := WeekKey(commit.Date)
 		w := getOrCreateWeek(result.Weekly, week)
 		w.TotalCommits++
-		for login := range canonicalParticipants {
+		for login := range uniqueInCommit {
 			w.Contributors[login]++
 		}
 	}
