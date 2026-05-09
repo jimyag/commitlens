@@ -39,7 +39,7 @@ type Config struct {
 	Repositories []Repository        `yaml:"repositories"`
 	Cache        Cache               `yaml:"cache"`
 	Web          Web                 `yaml:"web"`
-	UserMap      map[string][]string `yaml:"user_map"`
+	UserMap      map[string][]string `yaml:"userMap"`
 	// Language: UI language for TUI and CLI (en, zh). Empty means COMMITLENS_LANG / LANG.
 	Language string `yaml:"language"`
 }
