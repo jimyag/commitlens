@@ -17,6 +17,8 @@ interface Props {
   granularity: Granularity
   /** 用于趋势图左侧头像、贡献者表格等 */
   contributors: Record<string, ContributorStats>
+  /** 当前选中的用户列表，用于过滤趋势图行 */
+  selectedLogins?: string[]
   /** 点击柱子时的回调；login 为 undefined 表示总量柱 */
   onBarClick?: (period: string, login: string | undefined) => void
 }
@@ -45,11 +47,11 @@ const R_PAD = 16
 /** 全仓库图与下方各人图之间的空隙 */
 const GAP_AFTER_TOTAL = 44
 
-export function TrendChart({ weekly, granularity, contributors, onBarClick }: Props) {
+export function TrendChart({ weekly, granularity, contributors, selectedLogins = [], onBarClick }: Props) {
   const { t, tf } = useI18n()
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
-    () => buildTrendOption(weekly, granularity, contributors, { t, tf }),
-    [weekly, granularity, contributors, t, tf],
+    () => buildTrendOption(weekly, granularity, contributors, selectedLogins, { t, tf }),
+    [weekly, granularity, contributors, selectedLogins, t, tf],
   )
 
   const totalSeriesName = t('chart.totalSeries')
@@ -157,6 +159,7 @@ function buildTrendOption(
   weekly: Record<string, WeeklyEntry>,
   granularity: Granularity,
   contributors: Record<string, ContributorStats>,
+  selectedLogins: string[],
   l10n: L10n,
 ) {
   const { t, tf } = l10n
@@ -192,9 +195,17 @@ function buildTrendOption(
   const allSorted = Object.keys(loginTotals).sort(
     (a, b) => (loginTotals[b] ?? 0) - (loginTotals[a] ?? 0) || a.localeCompare(b),
   )
+
+  let logins: string[]
+  let truncated = 0
+  if (selectedLogins.length > 0) {
+    logins = allSorted.filter(l => selectedLogins.includes(l))
+  } else {
+    logins = allSorted.slice(0, MAX_CONTRIBUTOR_CHARTS)
+    truncated = allSorted.length - logins.length
+  }
+  
   const totalLoginCount = allSorted.length
-  const logins = allSorted.slice(0, MAX_CONTRIBUTOR_CHARTS)
-  const truncated = totalLoginCount - logins.length
 
   const nRows = 1 + logins.length
   const totalH = 300

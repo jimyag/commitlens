@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useApp, mergeContributors, mergeWeekly } from './context/AppContext'
 import { ContributorTable } from './components/ContributorTable'
@@ -19,18 +20,46 @@ export default function App() {
   const navigate = useNavigate()
   const { t, tf } = useI18n()
 
-  const repo = searchParams.get('repo') ?? ''
+  const selectedRepos = useMemo(() => {
+    const val = searchParams.get('repo')
+    return val ? val.split(',').filter(Boolean) : []
+  }, [searchParams])
+
   const gran = (searchParams.get('gran') ?? 'week') as Granularity
 
-  const filteredStats = repo ? allStats.filter(s => s.repo === repo) : allStats
-  const contributors = mergeContributors(filteredStats)
+  const selectedLogins = useMemo(() => {
+    const val = searchParams.get('login')
+    return val ? val.split(',').filter(Boolean) : []
+  }, [searchParams])
+
+  const filteredStats = useMemo(() => {
+    if (selectedRepos.length === 0) return allStats
+    return allStats.filter(s => selectedRepos.includes(s.repo))
+  }, [allStats, selectedRepos])
+
+  const contributors = useMemo(() => {
+    const merged = mergeContributors(filteredStats)
+    if (selectedLogins.length === 0) return merged
+    
+    // If specific logins are selected, we might want to filter the table too, 
+    // but the user mostly complained about the chart. 
+    // Let's filter the table to match the chart's focus.
+    const filtered: Record<string, any> = {}
+    selectedLogins.forEach(l => {
+      if (merged[l]) filtered[l] = merged[l]
+    })
+    return filtered
+  }, [filteredStats, selectedLogins])
+
   const weekly = mergeWeekly(filteredStats)
 
   const handleBarClick = (period: string, login: string | undefined) => {
     const next = new URLSearchParams(searchParams)
     next.set('period', period)
-    if (login) next.set('login', login)
-    else next.delete('login')
+    if (login) {
+      // If we clicked a personal bar, we probably want to focus on that person
+      next.set('login', login)
+    }
     navigate('/prs?' + next.toString())
   }
 
@@ -51,6 +80,7 @@ export default function App() {
             weekly={weekly}
             granularity={gran}
             contributors={contributors}
+            selectedLogins={selectedLogins}
             onBarClick={handleBarClick}
           />
         </div>

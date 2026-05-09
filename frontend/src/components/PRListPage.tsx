@@ -94,46 +94,8 @@ export function PRListPage() {
     return Array.from(set).sort().reverse()
   }, [allStats, repo, gran])
 
-  // 从 stats 数据推导当前 period 下的参与者（用于 pill 过滤器）
-  const participantsInPeriod = useMemo(() => {
-    const statsToUse = repo ? allStats.filter(s => s.repo === repo) : allStats
-    const loginSet = new Set<string>()
-    for (const s of statsToUse) {
-      for (const [wk, entry] of Object.entries(s.weekly ?? {})) {
-        const p = toPeriodKey(wk, gran)
-        if (!period || p === period) {
-          for (const login of Object.keys(entry.contributors)) {
-            // 如果全局选了人，则本地 pill 只显示全局选中的那些人（且在该周期内有提交的）
-            if (selectedLogins.length === 0 || selectedLogins.includes(login)) {
-              loginSet.add(login)
-            }
-          }
-        }
-      }
-    }
-    return Array.from(loginSet).sort()
-  }, [allStats, repo, gran, period, selectedLogins])
-
   const multiRepo = useMemo(() => new Set(commits.map(c => c.repo)).size > 1, [commits])
   const totalPages = Math.ceil(total / PER_PAGE)
-
-  const toggleLogin = (login: string) => {
-    let next: string[]
-    if (login === '') {
-      next = []
-    } else if (selectedLogins.includes(login)) {
-      next = selectedLogins.filter(v => v !== login)
-    } else {
-      next = [...selectedLogins, login]
-    }
-
-    setSearchParams(prev => {
-      const sp = new URLSearchParams(prev)
-      if (next.length > 0) sp.set('login', next.join(','))
-      else sp.delete('login')
-      return sp
-    })
-  }
 
   const patch = (key: string, value: string) => {
     setSearchParams(prev => {
@@ -170,7 +132,7 @@ export function PRListPage() {
         )}
       </div>
 
-      {/* 过滤栏：时间段选择器 + 贡献者 pills */}
+      {/* 过滤栏：仅保留时间段选择器 */}
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         {/* 时间段下拉 */}
         <select
@@ -186,22 +148,6 @@ export function PRListPage() {
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
-
-        {/* 贡献者 pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => toggleLogin('')} style={pillStyle(selectedLogins.length === 0)}>
-            {t('prPage.filterAll')}
-          </button>
-          {participantsInPeriod.map(login => {
-            const avatarUrl = allContributors[login]?.avatar_url
-            return (
-              <button key={login} onClick={() => toggleLogin(login)} style={pillStyle(selectedLogins.includes(login))}>
-                <Avatar login={login} avatarUrl={avatarUrl} />
-                {login}
-              </button>
-            )
-          })}
-        </div>
       </div>
 
       {/* Commit 表格 */}
@@ -303,17 +249,6 @@ export function PRListPage() {
       )}
     </div>
   )
-}
-
-function pillStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '5px 12px', borderRadius: 16, border: '1px solid',
-    borderColor: active ? '#6366f1' : '#d1d5db',
-    background: active ? '#eef2ff' : '#fff',
-    color: active ? '#4f46e5' : '#374151',
-    fontSize: 13, cursor: 'pointer', fontWeight: active ? 600 : 400,
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-  }
 }
 
 function pageBtn(disabled: boolean): React.CSSProperties {
