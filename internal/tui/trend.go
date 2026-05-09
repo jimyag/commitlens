@@ -64,20 +64,24 @@ func renderTrendView(a *App) string {
 	totalCommitsChart := renderBarChart(periods, totalCommitsValues, chartWidth, 12, false, selIdx, a.globalGranularity)
 
 	// 如果选中了具体贡献者，显示该贡献者的趋势
-	logins := a.availableGlobalLogins()
-	var selectedLogin string
-	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
-		selectedLogin = logins[a.globalLoginIdx]
-	}
-
-	personBlock := ""
-	if selectedLogin != "" {
+	var personBlock string
+	if len(a.globalLoginMulti) > 0 {
 		personValues := make([]float64, len(periods))
 		for i, p := range periods {
-			personValues[i] = float64(periodData[p].byContributor[selectedLogin])
+			sum := 0.0
+			for login := range a.globalLoginMulti {
+				sum += float64(periodData[p].byContributor[login])
+			}
+			personValues[i] = sum
+		}
+		label := locale.T("tui.trend.personTitleMulti")
+		if len(a.globalLoginMulti) == 1 {
+			for l := range a.globalLoginMulti {
+				label = fmt.Sprintf(locale.T("tui.trend.personTitle"), l)
+			}
 		}
 		pChart := renderBarChart(periods, personValues, chartWidth, 8, true, selIdx, a.globalGranularity)
-		personBlock = "\n" + fmt.Sprintf(locale.T("tui.trend.personTitle"), selectedLogin) + "\n" + pChart
+		personBlock = "\n" + label + "\n" + pChart
 	}
 
 	block1 := chartTitle + "\n" + totalCommitsChart + personBlock
@@ -98,6 +102,98 @@ func renderTrendView(a *App) string {
 		"",
 		clip1,
 	}, "\n")
+}
+
+func renderLinesTrendView(a *App) string {
+	granLabel := locale.T("tui.trend.hint")
+
+	periodData := aggregatePeriodsLines(a)
+	periods := sortedPeriodKeysLines(periodData)
+
+	if len(periods) == 0 {
+		return granLabel + "\n\n" + locale.T("tui.trend.nodata")
+	}
+
+	vpW := a.width
+	if vpW < 1 {
+		vpW = 80
+	}
+	chartWidth := trendChartCanvasW(len(periods), vpW)
+	if n := len(periods); a.trendLastPeriodN != n {
+		a.trendHScroll = 0
+		a.trendLastPeriodN = n
+	}
+
+	titleAdd := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true).Render(locale.T("tui.trend.linesAdd"))
+	titleDel := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render(locale.T("tui.trend.linesDel"))
+
+	addValues := make([]float64, len(periods))
+	delValues := make([]float64, len(periods))
+	for i, p := range periods {
+		addValues[i] = float64(periodData[p].additions)
+		delValues[i] = float64(periodData[p].deletions)
+	}
+
+	selIdx := -1
+	if a.globalFocus == 3 {
+		selIdx = a.trendPeriodCursor
+	}
+
+	// For Deletions, we use a different color (red)
+	addChart := renderBarChart(periods, addValues, chartWidth, 10, false, selIdx, a.globalGranularity)
+	
+	// Temporarily swap styles to render deletions in Red
+	oldStyle := barValueStyle
+	barValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("9"))
+	delChart := renderBarChart(periods, delValues, chartWidth, 10, false, selIdx, a.globalGranularity)
+	barValueStyle = oldStyle
+
+	block := titleAdd + "\n" + addChart + "\n\n" + titleDel + "\n" + delChart
+	maxOff := trendHScrollMaxForBlock(block, vpW)
+	if a.trendHScroll > maxOff {
+		a.trendHScroll = maxOff
+	}
+
+	clip := block
+	if maxOff > 0 {
+		st := trendScrollStatusLine(a.trendHScroll, maxOff, vpW)
+		clip = st + "\n" + clipViewHorizontal(block, a.trendHScroll, vpW)
+	}
+
+	return strings.Join([]string{
+		granLabel,
+		"",
+		clip,
+	}, "\n")
+}
+
+type periodEntryLines struct {
+	additions int
+	deletions int
+}
+
+func aggregatePeriodsLines(a *App) map[string]*periodEntryLines {
+	result := make(map[string]*periodEntryLines)
+	for _, s := range trendFilteredStats(a) {
+		for weekKey, w := range s.Weekly {
+			period := toPeriodKey(weekKey, a.globalGranularity)
+			if _, ok := result[period]; !ok {
+				result[period] = &periodEntryLines{}
+			}
+			result[period].additions += w.TotalAdditions
+			result[period].deletions += w.TotalDeletions
+		}
+	}
+	return result
+}
+
+func sortedPeriodKeysLines(m map[string]*periodEntryLines) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // 与 ntcharts examples/barchart/vertical 示例一致的轴/标签/色块风格。

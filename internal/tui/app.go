@@ -22,6 +22,7 @@ const (
 	viewSummary viewMode = iota
 	viewRepo
 	viewTrend
+	viewLinesTrend
 	viewCommitList
 )
 
@@ -46,7 +47,8 @@ type App struct {
 	globalRepoExpanded  bool             // true if repo multi-select list is open
 	globalRepoCursor    int              // cursor for multi-select list
 	globalGranularity   int              // 0=Week, 1=Month, 2=Quarter, 3=Year
-	globalLoginIdx      int              // 0=ALL, 1..N
+	globalLoginIdx      int              // cursor for contributor list
+	globalLoginMulti    map[string]struct{}
 	globalLoginExpanded bool
 	globalLoginCursor   int
 	globalLoginSearch   string
@@ -92,6 +94,7 @@ func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Reposito
 		globalFocus:       0,
 		globalGranularity: 0,
 		globalLoginIdx:    0,
+		globalLoginMulti:  make(map[string]struct{}),
 		commitListFocus:   0,
 	}
 }
@@ -150,7 +153,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.globalLoginExpanded = false
 				a.globalLoginSearch = ""
 			}
-		case "1", "2", "3", "4":
+		case "1", "2", "3", "4", "5":
 			if a.globalLoginExpanded {
 				a.globalLoginSearch += s
 				a.globalLoginCursor = 0
@@ -164,12 +167,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "[":
-			a.mode = (a.mode + 3) % 4
+			a.mode = (a.mode + 4) % 5
 			if a.mode == viewCommitList {
 				a.refreshCommitList()
 			}
 		case "]":
-			a.mode = (a.mode + 1) % 4
+			a.mode = (a.mode + 1) % 5
 			if a.mode == viewCommitList {
 				a.refreshCommitList()
 			}
@@ -214,17 +217,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					filtered := a.filteredLogins()
 					if a.globalLoginCursor >= 0 && a.globalLoginCursor < len(filtered) {
 						selected := filtered[a.globalLoginCursor]
-						all := a.availableGlobalLogins()
-						for i, l := range all {
-							if l == selected {
-								a.globalLoginIdx = i
-								break
-							}
-						}
+						a.toggleGlobalLogin(selected)
+						a.globalLoginExpanded = false
+						a.globalLoginSearch = ""
 					}
-					a.globalLoginExpanded = false
-					a.globalLoginSearch = ""
-					a.onGlobalFilterChange()
 				} else {
 					a.globalLoginExpanded = true
 					a.globalLoginSearch = ""
@@ -245,9 +241,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.globalRepoExpanded = true
 					a.globalRepoCursor = 0
 				}
-			} else if a.globalFocus == 2 && a.globalLoginExpanded {
-				a.globalLoginSearch += " "
-				a.globalLoginCursor = 0
+			} else if a.globalFocus == 2 {
+				if a.globalLoginExpanded {
+					filtered := a.filteredLogins()
+					if a.globalLoginCursor >= 0 && a.globalLoginCursor < len(filtered) {
+						selected := filtered[a.globalLoginCursor]
+						a.toggleGlobalLogin(selected)
+					}
+				} else {
+					a.globalLoginExpanded = true
+					a.globalLoginSearch = ""
+					a.globalLoginCursor = 0
+				}
 			}
 		case "r":
 			if a.globalLoginExpanded {
@@ -313,10 +318,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if a.globalFocus == 2 {
 				if !a.globalLoginExpanded {
-					if a.globalLoginIdx > 0 {
-						a.globalLoginIdx--
-						a.onGlobalFilterChange()
-					}
+					// No horizontal cycle for multi-select contributors anymore? 
+					// Keep it simple for now.
 				}
 			} else if a.globalFocus == 3 {
 				if a.mode == viewTrend {
@@ -340,10 +343,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if a.globalFocus == 2 {
 				if !a.globalLoginExpanded {
-					if a.globalLoginIdx < len(a.availableGlobalLogins())-1 {
-						a.globalLoginIdx++
-						a.onGlobalFilterChange()
-					}
+					// No horizontal cycle
 				}
 			} else if a.globalFocus == 3 {
 				if a.mode == viewTrend {
@@ -369,25 +369,29 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) preserveLoginIdxDuring(changeFn func()) {
-	oldLogins := a.availableGlobalLogins()
-	var oldLogin string
-	if a.globalLoginIdx >= 0 && a.globalLoginIdx < len(oldLogins) {
-		oldLogin = oldLogins[a.globalLoginIdx]
-	}
-
 	changeFn()
-
-	newLogins := a.availableGlobalLogins()
-	newIdx := 0
-	if oldLogin != "" && oldLogin != locale.T("tui.prlist.filterAll") {
-		for i, l := range newLogins {
-			if l == oldLogin {
-				newIdx = i
-				break
-			}
+	newLoginsSet := make(map[string]struct{})
+	for _, l := range a.availableGlobalLogins() {
+		newLoginsSet[l] = struct{}{}
+	}
+	for l := range a.globalLoginMulti {
+		if _, ok := newLoginsSet[l]; !ok {
+			delete(a.globalLoginMulti, l)
 		}
 	}
-	a.globalLoginIdx = newIdx
+	a.onGlobalFilterChange()
+}
+
+func (a *App) toggleGlobalLogin(login string) {
+	if login == locale.T("tui.prlist.filterAll") {
+		a.globalLoginMulti = make(map[string]struct{})
+	} else {
+		if _, ok := a.globalLoginMulti[login]; ok {
+			delete(a.globalLoginMulti, login)
+		} else {
+			a.globalLoginMulti[login] = struct{}{}
+		}
+	}
 	a.onGlobalFilterChange()
 }
 
@@ -474,17 +478,11 @@ func (a *App) refreshCommitList() {
 		period = periods[a.commitListPeriodIdx]
 	}
 
-	logins := a.availableGlobalLogins()
-	var login string
-	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
-		login = logins[a.globalLoginIdx]
-	}
-
-	a.commitList = a.fetchCommits(period, login)
+	a.commitList = a.fetchCommits(period)
 	a.commitListCursor = 0
 }
 
-func (a *App) fetchCommits(period, login string) []commitItem {
+func (a *App) fetchCommits(period string) []commitItem {
 	var out []commitItem
 	stats_ := trendFilteredStats(a)
 	for _, s := range stats_ {
@@ -498,14 +496,17 @@ func (a *App) fetchCommits(period, login string) []commitItem {
 					continue
 				}
 			}
-			if login != "" {
+			
+			participants := commit.Participants
+			if len(participants) == 0 {
+				participants = []string{commit.Author}
+			}
+			
+			// Filter by global multi-select logins
+			if len(a.globalLoginMulti) > 0 {
 				found := false
-				participants := commit.Participants
-				if len(participants) == 0 {
-					participants = []string{commit.Author}
-				}
 				for _, p := range participants {
-					if p == login {
+					if _, ok := a.globalLoginMulti[p]; ok {
 						found = true
 						break
 					}
@@ -513,11 +514,6 @@ func (a *App) fetchCommits(period, login string) []commitItem {
 				if !found {
 					continue
 				}
-			}
-			
-			participants := commit.Participants
-			if len(participants) == 0 {
-				participants = []string{commit.Author}
 			}
 			
 			out = append(out, commitItem{
@@ -607,6 +603,8 @@ func (a *App) View() tea.View {
 		body = a.renderRepo()
 	case viewTrend:
 		body = a.renderTrend()
+	case viewLinesTrend:
+		body = a.renderLinesTrend()
 	case viewCommitList:
 		body = a.renderCommitList()
 	}
@@ -621,6 +619,7 @@ func (a *App) renderHeader() string {
 		locale.T("tui.tab.summary"),
 		locale.T("tui.tab.repos"),
 		locale.T("tui.tab.trend"),
+		locale.T("tui.tab.trendLines"),
 		locale.T("tui.tab.prlist"),
 	}
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -645,9 +644,10 @@ func (a *App) renderStatus() string {
 	return ""
 }
 
-func (a *App) renderSummary() string { return renderSummaryView(a) }
-func (a *App) renderRepo() string    { return renderRepoView(a) }
-func (a *App) renderTrend() string   { return renderTrendView(a) }
+func (a *App) renderSummary() string    { return renderSummaryView(a) }
+func (a *App) renderRepo() string       { return renderRepoView(a) }
+func (a *App) renderTrend() string      { return renderTrendView(a) }
+func (a *App) renderLinesTrend() string { return renderLinesTrendView(a) }
 
 func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache, statsCache *cache.StatsCache) error {
 	app := New(syncer, stats, repos, rawCache, statsCache)
@@ -664,19 +664,27 @@ var (
 )
 
 func (a *App) visibleRepoIndices() []int {
-	var selectedLogin string
-	logins := a.availableGlobalLogins()
-	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
-		selectedLogin = logins[a.globalLoginIdx]
+	var selectedLogins []string
+	if len(a.globalLoginMulti) > 0 {
+		for l := range a.globalLoginMulti {
+			selectedLogins = append(selectedLogins, l)
+		}
 	}
 
 	var out []int
 	for i, s := range a.stats {
-		if selectedLogin == "" {
+		if len(selectedLogins) == 0 {
 			out = append(out, i)
 			continue
 		}
-		if _, ok := s.Contributors[selectedLogin]; ok {
+		found := false
+		for _, sl := range selectedLogins {
+			if _, ok := s.Contributors[sl]; ok {
+				found = true
+				break
+			}
+		}
+		if found {
 			out = append(out, i)
 		}
 	}
@@ -710,13 +718,21 @@ func (a *App) renderGlobalFilters() string {
 	granFilter := granStyle.Render(fmt.Sprintf("%s: < %s >", globalFilterLabelStyle.Render(locale.T("granularity.period")), globalFilterValueStyle.Render(granVal)))
 
 	// Contributor filter
-	logins := a.availableGlobalLogins()
-	loginVal := logins[a.globalLoginIdx]
+	loginVal := locale.T("tui.prlist.filterAll")
+	if len(a.globalLoginMulti) > 0 {
+		if len(a.globalLoginMulti) == 1 {
+			for l := range a.globalLoginMulti {
+				loginVal = l
+			}
+		} else {
+			loginVal = fmt.Sprintf(locale.T("filter.multiUsers"), len(a.globalLoginMulti))
+		}
+	}
 	loginStyle := globalFilterBoxStyle
 	if a.globalFocus == 2 {
 		loginStyle = globalFilterBoxActiveStyle
 	}
-	loginFilter := loginStyle.Render(fmt.Sprintf("%s: < %s >", globalFilterLabelStyle.Render(locale.T("tui.table.contributor")), globalFilterValueStyle.Render(loginVal)))
+	loginFilter := loginStyle.Render(fmt.Sprintf("%s: %s", globalFilterLabelStyle.Render(locale.T("tui.table.contributor")), globalFilterValueStyle.Render(loginVal)))
 
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, repoFilter, "  ", granFilter, "  ", loginFilter)
 
@@ -762,11 +778,18 @@ func (a *App) renderGlobalFilters() string {
 			}
 			for i := start; i < end; i++ {
 				l := filtered[i]
-				if i == a.globalLoginCursor {
-					lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> "+l))
-				} else {
-					lines = append(lines, "  "+l)
+				mark := "[ ] "
+				if _, ok := a.globalLoginMulti[l]; ok {
+					mark = "[x] "
+				} else if l == locale.T("tui.prlist.filterAll") && len(a.globalLoginMulti) == 0 {
+					mark = "[x] "
 				}
+
+				line := "  " + mark + l
+				if i == a.globalLoginCursor {
+					line = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + mark + l)
+				}
+				lines = append(lines, line)
 			}
 			if end < len(filtered) {
 				lines = append(lines, fmt.Sprintf("  ... and %d more", len(filtered)-end))
