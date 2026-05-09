@@ -295,41 +295,61 @@ func (c *Client) graphql(ctx context.Context, query string, variables map[string
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/graphql", strings.NewReader(string(data)))
-	if err != nil {
-		return err
-	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	// Add GraphQL specifically needed headers if any
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	var lastErr error
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 2s, 4s, 8s
+			time.Sleep(time.Duration(1<<attempt) * time.Second)
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/graphql", strings.NewReader(string(data)))
+		if err != nil {
+			return err
+		}
+		if c.token != "" {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("github GraphQL error: %s", resp.Status)
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode >= 500 {
+			lastErr = fmt.Errorf("github GraphQL error: %s", resp.Status)
+			resp.Body.Close()
+			continue
+		}
+
+		if resp.StatusCode >= 400 {
+			defer resp.Body.Close()
+			return fmt.Errorf("github GraphQL error: %s", resp.Status)
+		}
+
+		var result struct {
+			Data   json.RawMessage `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			resp.Body.Close()
+			return err
+		}
+		resp.Body.Close()
+
+		if len(result.Errors) > 0 {
+			// Some GraphQL errors might be transient, but we'll return immediately for now
+			return fmt.Errorf("graphql error: %s", result.Errors[0].Message)
+		}
+
+		return json.Unmarshal(result.Data, out)
 	}
 
-	var result struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return err
-	}
-	if len(result.Errors) > 0 {
-		return fmt.Errorf("graphql error: %s", result.Errors[0].Message)
-	}
-
-	return json.Unmarshal(result.Data, out)
+	return lastErr
 }
 
 func (c *Client) GetDirectCommitsSince(ctx context.Context, owner, repo string, since time.Time, onProgress func(FetchProgress)) ([]Commit, error) {
