@@ -11,11 +11,12 @@ import (
 )
 
 type RawData struct {
-	Repo              string      `json:"repo"`
-	LastUpdated       time.Time   `json:"last_updated"`
-	InitialDirectSync bool        `json:"initial_direct_sync"`
-	PRs               []gh.PR     `json:"prs"`
-	DirectCommits     []gh.Commit `json:"direct_commits"`
+	Repo                string      `json:"repo"`
+	LastUpdated         time.Time   `json:"last_updated"`
+	InitialDirectSync   bool        `json:"initial_direct_sync"`
+	PRs                 []gh.PR     `json:"prs"`
+	DirectCommits       []gh.Commit `json:"direct_commits"`
+	DirectCommitsCursor string      `json:"direct_commits_cursor,omitempty"`
 }
 
 type RawCache struct {

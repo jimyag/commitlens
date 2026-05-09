@@ -161,13 +161,22 @@ func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.F
 		directSince = time.Time{}
 	}
 
-	newCommits, err := s.client.GetDirectCommitsSince(ctx, owner, name, directSince, onProgress)
-	if err != nil {
-		return fmt.Errorf("fetch direct commits: %w", err)
+	newCommits, nextCursor, err := s.client.GetDirectCommitsSince(ctx, owner, name, directSince, raw.DirectCommitsCursor, onProgress)
+	
+	// Always merge whatever we fetched, even if there's an error partway through.
+	raw.PRs = mergePRs(newPRs, raw.PRs)
+	if len(newCommits) > 0 {
+		raw.DirectCommits = mergeCommits(newCommits, raw.DirectCommits)
 	}
 
-	raw.PRs = mergePRs(newPRs, raw.PRs)
-	raw.DirectCommits = mergeCommits(newCommits, raw.DirectCommits)
+	if err != nil {
+		raw.DirectCommitsCursor = nextCursor
+		// Save partial progress
+		_ = s.rawCache.Save(raw)
+		return fmt.Errorf("fetch direct commits (partial): %w", err)
+	}
+
+	raw.DirectCommitsCursor = "" // Fully done
 	raw.InitialDirectSync = true
 	raw.LastUpdated = time.Now().UTC()
 	if err := s.rawCache.Save(raw); err != nil {

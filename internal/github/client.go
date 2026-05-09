@@ -352,7 +352,7 @@ func (c *Client) graphql(ctx context.Context, query string, variables map[string
 	return lastErr
 }
 
-func (c *Client) GetDirectCommitsSince(ctx context.Context, owner, repo string, since time.Time, onProgress func(FetchProgress)) ([]Commit, error) {
+func (c *Client) GetDirectCommitsSince(ctx context.Context, owner, repo string, since time.Time, startCursor string, onProgress func(FetchProgress)) ([]Commit, string, error) {
 	query := `
 query($owner: String!, $name: String!, $since: GitTimestamp, $cursor: String) {
   repository(owner: $owner, name: $name) {
@@ -384,6 +384,13 @@ query($owner: String!, $name: String!, $since: GitTimestamp, $cursor: String) {
 `
 	var commits []Commit
 	var cursor *string
+	var lastCursor string
+	
+	if startCursor != "" {
+		cursor = &startCursor
+		lastCursor = startCursor
+	}
+	
 	page := 1
 
 	for {
@@ -430,7 +437,7 @@ query($owner: String!, $name: String!, $since: GitTimestamp, $cursor: String) {
 		}
 
 		if err := c.graphql(ctx, query, variables, &resp); err != nil {
-			return nil, err
+			return commits, lastCursor, err
 		}
 
 		ref := resp.Repository.DefaultBranchRef
@@ -469,8 +476,11 @@ query($owner: String!, $name: String!, $since: GitTimestamp, $cursor: String) {
 			break
 		}
 		cursor = ref.Target.History.PageInfo.EndCursor
+		if cursor != nil {
+			lastCursor = *cursor
+		}
 		page++
 	}
 
-	return commits, nil
+	return commits, "", nil
 }
