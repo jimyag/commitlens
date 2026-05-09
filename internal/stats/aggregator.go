@@ -39,6 +39,21 @@ func Aggregate(raw *cache.RawData) *cache.StatsData {
 		}
 	}
 
+	for _, commit := range raw.DirectCommits {
+		// 直接提交，作者仅有一人
+		login := commit.Author
+		c := getOrCreate(result.Contributors, login, "")
+		c.PRCount++ // 将 Direct Commit 计为一次有效的 Submission 从而和 PR 一同显示
+		c.CommitCount++
+		c.Additions += commit.Additions
+		c.Deletions += commit.Deletions
+
+		week := WeekKey(commit.Date)
+		w := getOrCreateWeek(result.Weekly, week)
+		w.TotalPRs++ // 将 Direct Commit 计入总 Submission 趋势
+		w.Contributors[login]++
+	}
+
 	return result
 }
 

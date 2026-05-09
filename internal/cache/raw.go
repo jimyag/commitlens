@@ -11,9 +11,10 @@ import (
 )
 
 type RawData struct {
-	Repo        string    `json:"repo"`
-	LastUpdated time.Time `json:"last_updated"`
-	PRs         []gh.PR   `json:"prs"`
+	Repo          string      `json:"repo"`
+	LastUpdated   time.Time   `json:"last_updated"`
+	PRs           []gh.PR     `json:"prs"`
+	DirectCommits []gh.Commit `json:"direct_commits"`
 }
 
 type RawCache struct {

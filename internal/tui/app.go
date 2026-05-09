@@ -65,6 +65,7 @@ type App struct {
 type prItem struct {
 	Repo         string
 	Number       int
+	SHA          string
 	Title        string
 	Author       string
 	Participants []string
@@ -615,6 +616,27 @@ func (a *App) fetchPRs(period, login string) []prItem {
 				MergedAt:     pr.MergedAt,
 				Additions:    pr.Additions,
 				Deletions:    pr.Deletions,
+			})
+		}
+		for _, commit := range raw.DirectCommits {
+			if period != "" {
+				if toPeriodKey(stats.WeekKey(commit.Date), a.globalGranularity) != period {
+					continue
+				}
+			}
+			if login != "" && login != commit.Author {
+				continue
+			}
+			out = append(out, prItem{
+				Repo:         s.Repo,
+				Number:       0,
+				SHA:          commit.SHA,
+				Title:        commit.Message,
+				Author:       commit.Author,
+				Participants: []string{commit.Author},
+				MergedAt:     commit.Date,
+				Additions:    commit.Additions,
+				Deletions:    commit.Deletions,
 			})
 		}
 	}

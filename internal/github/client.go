@@ -25,11 +25,12 @@ type PR struct {
 }
 
 type Commit struct {
-	SHA       string `json:"sha"`
-	Author    string `json:"author"`
-	Message   string `json:"message"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
+	SHA       string    `json:"sha"`
+	Author    string    `json:"author"`
+	Message   string    `json:"message"`
+	Additions int       `json:"additions"`
+	Deletions int       `json:"deletions"`
+	Date      time.Time `json:"date"`
 }
 
 // FetchProgress is reported during GetMergedPRsSince.
@@ -250,7 +251,8 @@ func (c *Client) GetPRCommits(ctx context.Context, owner, repo string, prNumber 
 		Commit struct {
 			Message string `json:"message"`
 			Author  struct {
-				Name string `json:"name"`
+				Name string    `json:"name"`
+				Date time.Time `json:"date"`
 			} `json:"author"`
 		} `json:"commit"`
 		Author *struct {
@@ -277,7 +279,178 @@ func (c *Client) GetPRCommits(ctx context.Context, owner, repo string, prNumber 
 			Message:   r.Commit.Message,
 			Additions: r.Stats.Additions,
 			Deletions: r.Stats.Deletions,
+			Date:      r.Commit.Author.Date,
 		})
 	}
+	return commits, nil
+}
+
+func (c *Client) graphql(ctx context.Context, query string, variables map[string]interface{}, out any) error {
+	body := map[string]interface{}{
+		"query":     query,
+		"variables": variables,
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/graphql", strings.NewReader(string(data)))
+	if err != nil {
+		return err
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// Add GraphQL specifically needed headers if any
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("github GraphQL error: %s", resp.Status)
+	}
+
+	var result struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return err
+	}
+	if len(result.Errors) > 0 {
+		return fmt.Errorf("graphql error: %s", result.Errors[0].Message)
+	}
+
+	return json.Unmarshal(result.Data, out)
+}
+
+func (c *Client) GetDirectCommitsSince(ctx context.Context, owner, repo string, since time.Time, onProgress func(FetchProgress)) ([]Commit, error) {
+	query := `
+query($owner: String!, $name: String!, $since: GitTimestamp, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(since: $since, first: 100, after: $cursor) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              oid
+              messageHeadline
+              committedDate
+              additions
+              deletions
+              author {
+                user { login }
+                name
+              }
+              associatedPullRequests(first: 1) {
+                totalCount
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+`
+	var commits []Commit
+	var cursor *string
+	page := 1
+
+	for {
+		variables := map[string]interface{}{
+			"owner": owner,
+			"name":  repo,
+		}
+		if cursor != nil {
+			variables["cursor"] = *cursor
+		}
+		if !since.IsZero() {
+			variables["since"] = since.Format(time.RFC3339)
+		}
+
+		var resp struct {
+			Repository struct {
+				DefaultBranchRef *struct {
+					Target struct {
+						History struct {
+							PageInfo struct {
+								HasNextPage bool    `json:"hasNextPage"`
+								EndCursor   *string `json:"endCursor"`
+							} `json:"pageInfo"`
+							Nodes []struct {
+								Oid             string    `json:"oid"`
+								MessageHeadline string    `json:"messageHeadline"`
+								CommittedDate   time.Time `json:"committedDate"`
+								Additions       int       `json:"additions"`
+								Deletions       int       `json:"deletions"`
+								Author          struct {
+									User *struct {
+										Login string `json:"login"`
+									} `json:"user"`
+									Name string `json:"name"`
+								} `json:"author"`
+								AssociatedPullRequests struct {
+									TotalCount int `json:"totalCount"`
+								} `json:"associatedPullRequests"`
+							} `json:"nodes"`
+						} `json:"history"`
+					} `json:"target"`
+				} `json:"defaultBranchRef"`
+			} `json:"repository"`
+		}
+
+		if err := c.graphql(ctx, query, variables, &resp); err != nil {
+			return nil, err
+		}
+
+		ref := resp.Repository.DefaultBranchRef
+		if ref == nil {
+			break // Empty repository or no default branch
+		}
+
+		nodes := ref.Target.History.Nodes
+		for _, node := range nodes {
+			if node.AssociatedPullRequests.TotalCount == 0 {
+				author := node.Author.Name
+				if node.Author.User != nil {
+					author = node.Author.User.Login
+				}
+				commits = append(commits, Commit{
+					SHA:       node.Oid,
+					Author:    author,
+					Message:   node.MessageHeadline,
+					Additions: node.Additions,
+					Deletions: node.Deletions,
+					Date:      node.CommittedDate,
+				})
+			}
+		}
+
+		if onProgress != nil && len(nodes) > 0 {
+			onProgress(FetchProgress{
+				PRsFetched: len(commits),
+				PRsTotal:   -1,
+				ListPage:   page,
+				Log:        fmt.Sprintf("checking commits page %d", page),
+			})
+		}
+
+		if !ref.Target.History.PageInfo.HasNextPage {
+			break
+		}
+		cursor = ref.Target.History.PageInfo.EndCursor
+		page++
+	}
+
 	return commits, nil
 }

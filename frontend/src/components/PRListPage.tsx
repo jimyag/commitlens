@@ -204,8 +204,16 @@ export function PRListPage() {
             <tbody>
               {prs.map((pr, idx) => {
                 const participants = pr.participants?.length ? pr.participants : [pr.author]
+                const isDirect = pr.number === 0
+                const linkUrl = isDirect 
+                  ? `https://github.com/${pr.repo}/commit/${pr.sha}`
+                  : `https://github.com/${pr.repo}/pull/${pr.number}`
+                const linkText = isDirect
+                  ? `[${pr.sha?.substring(0, 7)}]`
+                  : `#${pr.number}`
+                
                 return (
-                  <tr key={`${pr.repo}-${pr.number}`} style={{
+                  <tr key={`${pr.repo}-${isDirect ? pr.sha : pr.number}`} style={{
                     borderBottom: idx < prs.length - 1 ? '1px solid #f3f4f6' : 'none',
                     background: idx % 2 === 0 ? '#fff' : '#fafafa',
                   }}>
@@ -215,13 +223,13 @@ export function PRListPage() {
                     <td style={{ ...tdStyle, minWidth: 240 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                         <a
-                          href={`https://github.com/${pr.repo}/pull/${pr.number}`}
+                          href={linkUrl}
                           target="_blank" rel="noopener noreferrer"
                           style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}
                           onMouseOver={e => (e.currentTarget.style.textDecoration = 'underline')}
                           onMouseOut={e => (e.currentTarget.style.textDecoration = 'none')}
                         >
-                          #{pr.number}
+                          {linkText}
                         </a>
                         <span style={{ color: '#111827', lineHeight: 1.5 }}>{pr.title}</span>
                       </div>

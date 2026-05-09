@@ -24,6 +24,7 @@ export interface StatsData {
 export interface PRInfo {
   repo: string
   number: number
+  sha?: string
   title: string
   author: string
   avatar_url: string

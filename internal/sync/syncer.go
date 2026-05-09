@@ -119,6 +119,22 @@ func mergePRs(newPRs, existing []gh.PR) []gh.PR {
 	return result
 }
 
+// mergeCommits merges newCommits into existing, deduplicating by SHA.
+func mergeCommits(newCommits, existing []gh.Commit) []gh.Commit {
+	seen := make(map[string]struct{}, len(newCommits))
+	for _, c := range newCommits {
+		seen[c.SHA] = struct{}{}
+	}
+	result := make([]gh.Commit, 0, len(newCommits)+len(existing))
+	result = append(result, newCommits...)
+	for _, c := range existing {
+		if _, ok := seen[c.SHA]; !ok {
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
 func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.FetchProgress)) error {
 	parts := strings.SplitN(repo, "/", 2)
 	if len(parts) != 2 {
@@ -140,7 +156,13 @@ func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.F
 		return fmt.Errorf("fetch PRs: %w", err)
 	}
 
+	newCommits, err := s.client.GetDirectCommitsSince(ctx, owner, name, since, onProgress)
+	if err != nil {
+		return fmt.Errorf("fetch direct commits: %w", err)
+	}
+
 	raw.PRs = mergePRs(newPRs, raw.PRs)
+	raw.DirectCommits = mergeCommits(newCommits, raw.DirectCommits)
 	raw.LastUpdated = time.Now().UTC()
 	if err := s.rawCache.Save(raw); err != nil {
 		return fmt.Errorf("save raw cache: %w", err)

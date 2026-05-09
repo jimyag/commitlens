@@ -54,6 +54,7 @@ func (s *Server) handleSync(c *gin.Context) {
 type PRInfo struct {
 	Repo         string    `json:"repo"`
 	Number       int       `json:"number"`
+	SHA          string    `json:"sha,omitempty"` // For direct commits
 	Title        string    `json:"title"`
 	Author       string    `json:"author"`
 	AvatarURL    string    `json:"avatar_url"`
@@ -128,6 +129,30 @@ func (s *Server) handleGetPRs(c *gin.Context) {
 				MergedAt:     pr.MergedAt,
 				Additions:    pr.Additions,
 				Deletions:    pr.Deletions,
+			})
+		}
+
+		for _, commit := range raw.DirectCommits {
+			if hasFrom && commit.Date.Before(from) {
+				continue
+			}
+			if hasTo && !commit.Date.Before(to) {
+				continue
+			}
+			if login != "" && login != commit.Author {
+				continue
+			}
+			result = append(result, PRInfo{
+				Repo:         r,
+				Number:       0,
+				SHA:          commit.SHA,
+				Title:        commit.Message,
+				Author:       commit.Author,
+				AvatarURL:    "",
+				Participants: []string{commit.Author},
+				MergedAt:     commit.Date,
+				Additions:    commit.Additions,
+				Deletions:    commit.Deletions,
 			})
 		}
 	}

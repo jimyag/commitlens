@@ -87,7 +87,16 @@ func (a *App) renderPRList() string {
 		if multiRepo {
 			row.WriteString(prListColRepoStyle.Render(ansi.Truncate(pr.Repo, 13, "...")))
 		}
-		row.WriteString(prListColPRStyle.Render(fmt.Sprintf("#%d", pr.Number)))
+		if pr.Number == 0 {
+			// Direct commit
+			shortSHA := pr.SHA
+			if len(shortSHA) > 7 {
+				shortSHA = shortSHA[:7]
+			}
+			row.WriteString(prListColPRStyle.Render(fmt.Sprintf("[%s]", shortSHA)))
+		} else {
+			row.WriteString(prListColPRStyle.Render(fmt.Sprintf("#%d", pr.Number)))
+		}
 		row.WriteString(prListColTitleStyle.Render(ansi.Truncate(pr.Title, 38, "...")))
 
 		authors := strings.Join(pr.Participants, ", ")
