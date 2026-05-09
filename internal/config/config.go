@@ -40,6 +40,8 @@ type Config struct {
 	Cache        Cache               `yaml:"cache"`
 	Web          Web                 `yaml:"web"`
 	UserMap      map[string][]string `yaml:"userMap"`
+	// DiscoveryRoots: Local directories to scan for Git repositories.
+	DiscoveryRoots []string `yaml:"discoveryRoots"`
 	// Language: UI language for TUI and CLI (en, zh). Empty means COMMITLENS_LANG / LANG.
 	Language string `yaml:"language"`
 }
@@ -62,6 +64,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Web.Port == 0 {
 		cfg.Web.Port = 8080
+	}
+	for i, root := range cfg.DiscoveryRoots {
+		cfg.DiscoveryRoots[i] = expandHome(root)
 	}
 	return cfg, nil
 }

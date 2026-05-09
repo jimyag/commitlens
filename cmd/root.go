@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
+	"github.com/jimyag/commitlens/internal/git"
 	"github.com/jimyag/commitlens/internal/locale"
 	"github.com/jimyag/commitlens/internal/stats"
 	isync "github.com/jimyag/commitlens/internal/sync"
@@ -70,6 +71,27 @@ func run(cmd *cobra.Command, args []string) error {
 	syncer := isync.New(cfg, rawCache, statsCache)
 
 	repos := cfg.Repositories
+	// Discovery
+	if len(cfg.DiscoveryRoots) > 0 {
+		discovered, err := git.Discover(cfg.DiscoveryRoots)
+		if err != nil {
+			return fmt.Errorf("discovery failed: %w", err)
+		}
+		repos = append(repos, discovered...)
+	}
+
+	// Deduplicate by ID
+	uniqueRepos := make([]config.Repository, 0, len(repos))
+	seenIDs := make(map[string]struct{})
+	for _, r := range repos {
+		id := r.ID()
+		if _, ok := seenIDs[id]; !ok {
+			seenIDs[id] = struct{}{}
+			uniqueRepos = append(uniqueRepos, r)
+		}
+	}
+	repos = uniqueRepos
+
 	var repoNames []string
 	for _, r := range repos {
 		repoNames = append(repoNames, r.ID())
