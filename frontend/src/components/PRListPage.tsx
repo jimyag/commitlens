@@ -41,7 +41,10 @@ export function PRListPage() {
   const period = searchParams.get('period') ?? ''
   const gran = (searchParams.get('gran') ?? 'week') as Granularity
   const repo = searchParams.get('repo') ?? ''
-  const selectedLogin = searchParams.get('login') ?? ''
+  const selectedLogins = useMemo(() => {
+    const val = searchParams.get('login')
+    return val ? val.split(',').filter(Boolean) : []
+  }, [searchParams])
 
   const [commits, setCommits] = useState<CommitInfo[]>([])
   const [total, setTotal] = useState(0)
@@ -49,7 +52,7 @@ export function PRListPage() {
   const [page, setPage] = useState(1)
 
   // Reset page to 1 when any filter (except page itself) changes
-  const filterKey = `${period}|${gran}|${repo}|${selectedLogin}`
+  const filterKey = `${period}|${gran}|${repo}|${selectedLogins.join(',')}`
   const prevFilterKey = useRef(filterKey)
   useEffect(() => {
     if (prevFilterKey.current !== filterKey) {
@@ -62,7 +65,7 @@ export function PRListPage() {
     setLoading(true)
     const params: Parameters<typeof api.getCommits>[0] = {
       repo: repo || undefined,
-      login: selectedLogin || undefined,
+      login: selectedLogins.length > 0 ? selectedLogins.join(',') : undefined,
       page,
       per_page: PER_PAGE,
     }
@@ -100,16 +103,37 @@ export function PRListPage() {
         const p = toPeriodKey(wk, gran)
         if (!period || p === period) {
           for (const login of Object.keys(entry.contributors)) {
-            loginSet.add(login)
+            // 如果全局选了人，则本地 pill 只显示全局选中的那些人（且在该周期内有提交的）
+            if (selectedLogins.length === 0 || selectedLogins.includes(login)) {
+              loginSet.add(login)
+            }
           }
         }
       }
     }
     return Array.from(loginSet).sort()
-  }, [allStats, repo, gran, period])
+  }, [allStats, repo, gran, period, selectedLogins])
 
   const multiRepo = useMemo(() => new Set(commits.map(c => c.repo)).size > 1, [commits])
   const totalPages = Math.ceil(total / PER_PAGE)
+
+  const toggleLogin = (login: string) => {
+    let next: string[]
+    if (login === '') {
+      next = []
+    } else if (selectedLogins.includes(login)) {
+      next = selectedLogins.filter(v => v !== login)
+    } else {
+      next = [...selectedLogins, login]
+    }
+
+    setSearchParams(prev => {
+      const sp = new URLSearchParams(prev)
+      if (next.length > 0) sp.set('login', next.join(','))
+      else sp.delete('login')
+      return sp
+    })
+  }
 
   const patch = (key: string, value: string) => {
     setSearchParams(prev => {
@@ -165,13 +189,13 @@ export function PRListPage() {
 
         {/* 贡献者 pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <button onClick={() => patch('login', '')} style={pillStyle(!selectedLogin)}>
+          <button onClick={() => toggleLogin('')} style={pillStyle(selectedLogins.length === 0)}>
             {t('prPage.filterAll')}
           </button>
           {participantsInPeriod.map(login => {
             const avatarUrl = allContributors[login]?.avatar_url
             return (
-              <button key={login} onClick={() => patch('login', login)} style={pillStyle(selectedLogin === login)}>
+              <button key={login} onClick={() => toggleLogin(login)} style={pillStyle(selectedLogins.includes(login))}>
                 <Avatar login={login} avatarUrl={avatarUrl} />
                 {login}
               </button>
