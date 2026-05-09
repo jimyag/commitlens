@@ -2,17 +2,38 @@ package stats
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/config"
 )
 
-func Aggregate(raw *cache.RawData) *cache.StatsData {
+func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 	result := &cache.StatsData{
 		Repo:         raw.Repo,
 		ComputedAt:   time.Now().UTC(),
 		Contributors: make(map[string]*cache.ContributorStats),
 		Weekly:       make(map[string]*cache.WeeklyEntry),
+	}
+
+	// Build a lookup map for aliases
+	aliasMap := make(map[string]string)
+	if cfg != nil {
+		for canonical, aliases := range cfg.UserMap {
+			for _, alias := range aliases {
+				aliasMap[strings.ToLower(alias)] = canonical
+			}
+			// Also ensure canonical name itself maps to itself if it appeared as an alias elsewhere
+			aliasMap[strings.ToLower(canonical)] = canonical
+		}
+	}
+
+	resolveName := func(name string) string {
+		if canonical, ok := aliasMap[strings.ToLower(name)]; ok {
+			return canonical
+		}
+		return name
 	}
 
 	for _, commit := range raw.Commits {
@@ -21,7 +42,13 @@ func Aggregate(raw *cache.RawData) *cache.StatsData {
 			participants = []string{commit.Author}
 		}
 
-		for _, login := range participants {
+		// Map to canonical names and deduplicate within this commit
+		canonicalParticipants := make(map[string]struct{})
+		for _, p := range participants {
+			canonicalParticipants[resolveName(p)] = struct{}{}
+		}
+
+		for login := range canonicalParticipants {
 			avatar := "" // We don't have avatar URLs from pure git log easily.
 			c := getOrCreate(result.Contributors, login, avatar)
 			c.CommitCount++
@@ -32,7 +59,7 @@ func Aggregate(raw *cache.RawData) *cache.StatsData {
 		week := WeekKey(commit.Date)
 		w := getOrCreateWeek(result.Weekly, week)
 		w.TotalCommits++
-		for _, login := range participants {
+		for login := range canonicalParticipants {
 			w.Contributors[login]++
 		}
 	}

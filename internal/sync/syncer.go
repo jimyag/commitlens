@@ -162,7 +162,7 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 		return fmt.Errorf("save raw cache: %w", err)
 	}
 
-	computed := stats.Aggregate(raw)
+	computed := stats.Aggregate(raw, s.cfg)
 	if err := s.statsCache.Save(computed); err != nil {
 		return fmt.Errorf("save stats cache: %w", err)
 	}

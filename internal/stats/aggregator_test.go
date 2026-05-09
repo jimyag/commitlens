@@ -42,7 +42,7 @@ func TestAggregate(t *testing.T) {
 		},
 	}
 
-	result := stats.Aggregate(raw)
+	result := stats.Aggregate(raw, nil)
 
 	if result.Contributors["jimyag"].CommitCount != 2 {
 		t.Errorf("jimyag CommitCount: want 2, got %d", result.Contributors["jimyag"].CommitCount)

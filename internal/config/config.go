@@ -35,10 +35,11 @@ type Web struct {
 }
 
 type Config struct {
-	GitHub       GitHub       `yaml:"github"`
-	Repositories []Repository `yaml:"repositories"`
-	Cache        Cache        `yaml:"cache"`
-	Web          Web          `yaml:"web"`
+	GitHub       GitHub              `yaml:"github"`
+	Repositories []Repository        `yaml:"repositories"`
+	Cache        Cache               `yaml:"cache"`
+	Web          Web                 `yaml:"web"`
+	UserMap      map[string][]string `yaml:"user_map"`
 	// Language: UI language for TUI and CLI (en, zh). Empty means COMMITLENS_LANG / LANG.
 	Language string `yaml:"language"`
 }
