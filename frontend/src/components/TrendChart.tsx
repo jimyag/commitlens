@@ -9,12 +9,15 @@ import { toPeriodKey, type Granularity } from '../utils/periodUtils'
 
 export type { Granularity }
 
+export type Metric = 'commits' | 'lines'
+
 /** 与单页性能平衡；超出可在下方表格中查看 */
-const MAX_CONTRIBUTOR_CHARTS = 48
+const MAX_CONTRIBUTOR_CHARTS = 100
 
 interface Props {
   weekly: Record<string, WeeklyEntry>
   granularity: Granularity
+  metric?: Metric
   /** 用于趋势图左侧头像、贡献者表格等 */
   contributors: Record<string, ContributorStats>
   /** 当前选中的用户列表，用于过滤趋势图行 */
@@ -24,9 +27,11 @@ interface Props {
 }
 const BAR_COLOR_TOTAL = '#6366f1'
 const BAR_COLOR_PERSON = '#16a34a'
+
 const AXIS = '#6b7280'
 const AXISLINE = '#e5e7eb'
-/** 柱顶显示 PR 数；为 0 的柱不标字，避免过密一墙 0 */
+
+/** 柱顶显示数值；为 0 的柱不标字，避免过密 */
 function barValueLabel(opts: { tiny?: boolean; color?: string }) {
   return {
     show: true,
@@ -37,21 +42,21 @@ function barValueLabel(opts: { tiny?: boolean; color?: string }) {
     formatter: (p: { value: unknown }) => {
       const n = Number(p.value)
       if (Number.isNaN(n) || n === 0) return ''
-      return String(n)
+      return String(Math.abs(n))
     },
   }
 }
 const L_LEFT = 12
 const L_NAME = 148
 const R_PAD = 16
-/** 全仓库图与下方各人图之间的空隙 */
-const GAP_AFTER_TOTAL = 44
+/** 全仓库图与下方各人图之间的空隙 (留给 DataZoom) */
+const GAP_AFTER_TOTAL = 60
 
-export function TrendChart({ weekly, granularity, contributors, selectedLogins = [], onBarClick }: Props) {
-  const { t, tf } = useI18n()
+export function TrendChart({ weekly, granularity, metric = 'commits', contributors, selectedLogins = [], onBarClick }: Props) {
+  const { t } = useI18n()
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
-    () => buildTrendOption(weekly, granularity, contributors, selectedLogins, { t, tf }),
-    [weekly, granularity, contributors, selectedLogins, t, tf],
+    () => buildTrendOption(weekly, granularity, metric, contributors, selectedLogins, { t }),
+    [weekly, granularity, metric, contributors, selectedLogins, t],
   )
 
   const totalSeriesName = t('chart.totalSeries')
@@ -59,7 +64,8 @@ export function TrendChart({ weekly, granularity, contributors, selectedLogins =
     (params: { name?: string; seriesName?: string }) => {
       const period = params.name
       if (!period || !onBarClick) return
-      const login = params.seriesName === totalSeriesName ? undefined : params.seriesName
+      // Match series names for HandleBarClick
+      const login = (params.seriesName === totalSeriesName || params.seriesName?.includes('Total')) ? undefined : params.seriesName
       onBarClick(period, login)
     },
     [onBarClick, totalSeriesName],
@@ -73,10 +79,17 @@ export function TrendChart({ weekly, granularity, contributors, selectedLogins =
     <div>
       {truncated > 0 && (
         <p style={{ fontSize: 12, color: '#9ca3af', margin: '0 0 8px' }}>
-          {tf('trend.truncated', { n: MAX_CONTRIBUTOR_CHARTS, total: totalLoginCount })}
+          {t('trend.truncated').replace('{n}', String(MAX_CONTRIBUTOR_CHARTS)).replace('{total}', String(totalLoginCount))}
         </p>
       )}
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div style={{ 
+        position: 'relative', 
+        width: '100%', 
+        maxHeight: '700px', 
+        overflowY: 'auto',
+        border: '1px solid #f3f4f6',
+        borderRadius: 8,
+      }}>
         {personRowLabels.map(row => (
           <div
             key={row.login}
@@ -152,25 +165,26 @@ export function TrendChart({ weekly, granularity, contributors, selectedLogins =
 
 type L10n = {
   t: (k: MessageKey) => string
-  tf: (k: MessageKey, vars: Record<string, string | number>) => string
 }
 
 function buildTrendOption(
   weekly: Record<string, WeeklyEntry>,
   granularity: Granularity,
+  metric: Metric,
   contributors: Record<string, ContributorStats>,
   selectedLogins: string[],
   l10n: L10n,
 ) {
-  const { t, tf } = l10n
-  const periodMap: Record<string, { total: number; byLogin: Record<string, number> }> = {}
+  const { t } = l10n
+  const periodMap: Record<string, { total: number; add: number; del: number; byLogin: Record<string, {c:number, a:number, d:number}> }> = {}
 
   for (const [weekKey, entry] of Object.entries(weekly)) {
     const period = toPeriodKey(weekKey, granularity)
-    if (!periodMap[period]) periodMap[period] = { total: 0, byLogin: {} }
+    if (!periodMap[period]) periodMap[period] = { total: 0, add: 0, del: 0, byLogin: {} }
     periodMap[period].total += entry.total_commits
     for (const [login, count] of Object.entries(entry.contributors)) {
-      periodMap[period].byLogin[login] = (periodMap[period].byLogin[login] ?? 0) + count
+      if (!periodMap[period].byLogin[login]) periodMap[period].byLogin[login] = {c:0, a:0, d:0}
+      periodMap[period].byLogin[login].c += count
     }
   }
 
@@ -185,11 +199,10 @@ function buildTrendOption(
     }
   }
 
-  const totalData = periods.map(p => periodMap[p].total)
   const loginTotals: Record<string, number> = {}
   for (const p of periods) {
-    for (const [l, c] of Object.entries(periodMap[p].byLogin)) {
-      loginTotals[l] = (loginTotals[l] ?? 0) + c
+    for (const [l, stats] of Object.entries(periodMap[p].byLogin)) {
+      loginTotals[l] = (loginTotals[l] ?? 0) + (metric === 'commits' ? stats.c : (stats.a + stats.d))
     }
   }
   const allSorted = Object.keys(loginTotals).sort(
@@ -208,13 +221,13 @@ function buildTrendOption(
   const totalLoginCount = allSorted.length
 
   const nRows = 1 + logins.length
-  const totalH = 300
-  const personH = 58
-  const gapY = 14
-  const topStart = 6
+  const totalH = 260
+  const personH = 60
+  const gapY = 16
+  const topStart = 10
   const xLabelExtra = 22
-  const sliderH = 24
-  const footPad = 14
+  const sliderH = 30
+  const footPad = 10
 
   const leftInner = L_LEFT + L_NAME
   const grids: GridComponentOption[] = []
@@ -222,12 +235,11 @@ function buildTrendOption(
   const yAxes: YAXisComponentOption[] = []
   const series: BarSeriesOption[] = []
   const xIdx = Array.from({ length: nRows }, (_, j) => j)
-  const rotateX = periods.length > 20 ? 50 : periods.length > 12 ? 32 : 0
+  const rotateX = periods.length > 20 ? 45 : 0
   const personRowLabels: { login: string; topPx: number; avatarUrl: string }[] = []
 
-  // 全仓（柱区加高，等效「更宽」的可视与点击区域）
+  // 全仓
   let y = topStart
-  let contentBottom = topStart + totalH
   grids.push({ left: leftInner, right: R_PAD, top: y, width: 'auto', height: totalH, containLabel: false })
   xAxes.push({
     type: 'category',
@@ -239,29 +251,41 @@ function buildTrendOption(
   yAxes.push({
     type: 'value',
     gridIndex: 0,
-    name: t('chart.repoWide'),
+    name: metric === 'commits' ? t('chart.repoWide') : 'Lines',
     nameTextStyle: { color: AXIS, fontSize: 11, fontWeight: 600 },
-    nameLocation: 'end',
     min: 0,
-    minInterval: 1,
     splitLine: { lineStyle: { color: '#f3f4f6' } },
   })
-  series.push({
-    name: t('chart.totalSeries'),
-    type: 'bar',
-    xAxisIndex: 0,
-    yAxisIndex: 0,
-    data: totalData,
-    itemStyle: { color: BAR_COLOR_TOTAL },
-    barMaxWidth: 16,
-    label: barValueLabel({ color: '#4f46e5' }),
-  })
+
+  if (metric === 'commits') {
+    series.push({
+      name: 'Total Commits',
+      type: 'bar',
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data: periods.map(p => periodMap[p].total),
+      itemStyle: { color: BAR_COLOR_TOTAL },
+      barMaxWidth: 20,
+      label: barValueLabel({ color: '#4f46e5' }),
+    })
+  } else {
+    series.push({
+      name: 'Total Activity',
+      type: 'bar',
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data: periods.map(p => periodMap[p].total),
+      itemStyle: { color: BAR_COLOR_TOTAL },
+      barMaxWidth: 20,
+    })
+  }
+
   y += totalH + gapY + GAP_AFTER_TOTAL
 
   for (let i = 0; i < logins.length; i++) {
     const gi = 1 + i
     const login = logins[i]
-    const rowData = periods.map(p => periodMap[p].byLogin[login] ?? 0)
+    const rowData = periods.map(p => periodMap[p].byLogin[login]?.c ?? 0)
     const showXLabel = i === logins.length - 1
     const h = showXLabel ? personH + xLabelExtra : personH
     grids.push({ left: leftInner, right: R_PAD, top: y, width: 'auto', height: h, containLabel: false })
@@ -269,65 +293,46 @@ function buildTrendOption(
       type: 'category',
       data: periods,
       gridIndex: gi,
-      axisLabel: {
-        show: showXLabel,
-        color: AXIS,
-        fontSize: 9,
-        interval: 0,
-        rotate: rotateX,
-      },
+      axisLabel: { show: showXLabel, color: AXIS, fontSize: 9, interval: 0, rotate: rotateX },
       axisLine: { show: true, lineStyle: { color: AXISLINE } },
     })
     yAxes.push({
       type: 'value',
       gridIndex: gi,
       min: 0,
-      minInterval: 1,
       splitLine: { lineStyle: { color: '#f3f4f6' } },
     })
     const avatarUrl = contributors[login]?.avatar_url?.trim() ?? ''
-    personRowLabels.push({
-      login,
-      topPx: y + h / 2,
-      avatarUrl,
-    })
+    personRowLabels.push({ login, topPx: y + h / 2, avatarUrl })
+    
     series.push({
       name: login,
       type: 'bar',
       xAxisIndex: gi,
       yAxisIndex: gi,
       data: rowData,
-      itemStyle: { color: BAR_COLOR_PERSON, opacity: 0.92 },
-      barMaxWidth: 12,
-      label: barValueLabel({ tiny: periods.length > 30 }),
+      itemStyle: { color: BAR_COLOR_PERSON, opacity: 0.9 },
+      barMaxWidth: 16,
+      label: barValueLabel({ tiny: true }),
     })
-    contentBottom = y + h
     y += h + gapY
   }
 
-  const heightPx = Math.ceil(contentBottom + footPad + sliderH + 4)
+  const heightPx = Math.ceil(y + footPad)
+  
+  // Default Zoom: show last 30 periods
+  const zoomStart = periods.length > 30 ? ((periods.length - 30) / periods.length) * 100 : 0
 
   const option: EChartsOption = {
     backgroundColor: 'transparent',
     textStyle: { color: '#374151' },
     tooltip: {
-      trigger: 'item',
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
       confine: true,
       backgroundColor: 'rgba(17, 24, 39, 0.92)',
       borderWidth: 0,
       textStyle: { color: '#f9fafb', fontSize: 12 },
-      formatter(params) {
-        const p = params as { name?: string; value?: number; seriesName?: string; dataIndex?: number }
-        const period = (p.name as string) || (p.dataIndex != null ? (periods[p.dataIndex] ?? '') : '')
-        const v = p.value
-        const who = p.seriesName ?? ''
-        if (v == null || !who) return ''
-        const line = tf('chart.tooltipLine', { who: escapeHtml(who), value: v })
-        return [
-          `<div style="font-weight:600;margin-bottom:6px">${escapeHtml(period)}</div>`,
-          line,
-        ].join('<br/>')
-      },
     },
     dataZoom: [
       {
@@ -335,17 +340,17 @@ function buildTrendOption(
         xAxisIndex: xIdx,
         left: leftInner,
         right: R_PAD,
-        bottom: 4,
+        top: topStart + totalH + 10, // Sticky below total chart
         height: sliderH,
+        start: zoomStart,
+        end: 100,
         filterMode: 'none',
         borderColor: '#d1d5db',
         handleStyle: { color: BAR_COLOR_TOTAL },
         dataBackground: { lineStyle: { color: AXISLINE }, areaStyle: { color: 'rgba(99, 102, 241, 0.08)' } },
         textStyle: { color: AXIS, fontSize: 10 },
-        showDetail: true,
-        brushSelect: true,
-        labelFormatter: (v: string | number) => (String(v).length > 8 ? '…' : String(v)),
       },
+      { type: 'inside', xAxisIndex: xIdx },
     ],
     grid: grids,
     xAxis: xAxes,
@@ -354,8 +359,4 @@ function buildTrendOption(
   }
 
   return { option, heightPx, truncated, totalLoginCount, personRowLabels }
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
