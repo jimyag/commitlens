@@ -108,7 +108,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 	case tea.KeyPressMsg:
-		if a.mode == viewTrend && a.trendHScrollKey(msg) {
+		if (a.mode == viewTrend || a.mode == viewLinesTrend) && a.trendHScrollKey(msg) {
 			return a, nil
 		}
 		s := msg.String()
