@@ -156,13 +156,19 @@ func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.F
 		return fmt.Errorf("fetch PRs: %w", err)
 	}
 
-	newCommits, err := s.client.GetDirectCommitsSince(ctx, owner, name, since, onProgress)
+	directSince := since
+	if !raw.InitialDirectSync {
+		directSince = time.Time{}
+	}
+
+	newCommits, err := s.client.GetDirectCommitsSince(ctx, owner, name, directSince, onProgress)
 	if err != nil {
 		return fmt.Errorf("fetch direct commits: %w", err)
 	}
 
 	raw.PRs = mergePRs(newPRs, raw.PRs)
 	raw.DirectCommits = mergeCommits(newCommits, raw.DirectCommits)
+	raw.InitialDirectSync = true
 	raw.LastUpdated = time.Now().UTC()
 	if err := s.rawCache.Save(raw); err != nil {
 		return fmt.Errorf("save raw cache: %w", err)
