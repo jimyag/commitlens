@@ -133,11 +133,11 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		addr := fmt.Sprintf(":%d", port)
 		fmt.Printf("CommitLens web UI: http://localhost%s\n", addr)
-		srv := web.New(globalAssets, syncer, allStats, repoNames, rawCache)
+		srv := web.New(globalAssets, syncer, allStats, repos, rawCache)
 		return srv.Run(addr)
 	}
 
-	return tui.Run(syncer, allStats, repos, rawCache)
+	return tui.Run(syncer, allStats, repos, rawCache, statsCache)
 }
 
 // runSync launches a bubbletea progress UI while syncing all repos concurrently.

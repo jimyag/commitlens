@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/config"
 	isync "github.com/jimyag/commitlens/internal/sync"
 )
 
@@ -15,19 +16,25 @@ type Server struct {
 	engine     *gin.Engine
 	syncer     *isync.Syncer
 	stats      []*cache.StatsData
-	repos      []string
+	repoNames  []string
+	repos      []config.Repository
 	rawCache   *cache.RawCache
 	frontendFS http.FileSystem
 }
 
-func New(assets embed.FS, syncer *isync.Syncer, stats []*cache.StatsData, repos []string, rawCache *cache.RawCache) *Server {
+func New(assets embed.FS, syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache) *Server {
 	gin.SetMode(gin.ReleaseMode)
+	repoNames := make([]string, len(repos))
+	for i, r := range repos {
+		repoNames[i] = r.ID()
+	}
 	s := &Server{
-		engine:   gin.New(),
-		syncer:   syncer,
-		stats:    stats,
-		repos:    repos,
-		rawCache: rawCache,
+		engine:    gin.New(),
+		syncer:    syncer,
+		stats:     stats,
+		repoNames: repoNames,
+		repos:     repos,
+		rawCache:  rawCache,
 	}
 	s.mountFrontend(assets)
 	s.registerAPI()

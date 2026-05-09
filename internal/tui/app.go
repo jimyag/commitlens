@@ -28,16 +28,17 @@ const (
 type syncDoneMsg struct{ err error }
 
 type App struct {
-	mode      viewMode
-	stats     []*cache.StatsData
-	repoNames []string
-	repos     []config.Repository
-	rawCache  *cache.RawCache
-	syncer    *isync.Syncer
-	syncing   bool
-	width     int
-	height    int
-	err       error
+	mode       viewMode
+	stats      []*cache.StatsData
+	repoNames  []string
+	repos      []config.Repository
+	rawCache   *cache.RawCache
+	statsCache *cache.StatsCache
+	syncer     *isync.Syncer
+	syncing    bool
+	width      int
+	height     int
+	err        error
 
 	// Global Filters
 	globalFocus         int              // 0=Repo, 1=Granularity, 2=Contributor, 3=ViewContent
@@ -76,7 +77,7 @@ type commitItem struct {
 	Deletions    int
 }
 
-func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache) *App {
+func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache, statsCache *cache.StatsCache) *App {
 	repoNames := make([]string, len(repos))
 	for i, r := range repos {
 		repoNames[i] = r.ID()
@@ -87,6 +88,7 @@ func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Reposito
 		repoNames:         repoNames,
 		repos:             repos,
 		rawCache:          rawCache,
+		statsCache:        statsCache,
 		globalFocus:       0,
 		globalGranularity: 0,
 		globalLoginIdx:    0,
@@ -539,6 +541,16 @@ func (a *App) fetchCommits(period, login string) []commitItem {
 func (a *App) doSync() tea.Cmd {
 	return func() tea.Msg {
 		a.syncer.SyncAll(context.Background(), a.repos, nil, 5)
+		
+		// Reload stats
+		var newStats []*cache.StatsData
+		for _, name := range a.repoNames {
+			s, err := a.statsCache.Load(name)
+			if err == nil {
+				newStats = append(newStats, s)
+			}
+		}
+		a.stats = newStats
 		return syncDoneMsg{err: nil}
 	}
 }
@@ -637,8 +649,8 @@ func (a *App) renderSummary() string { return renderSummaryView(a) }
 func (a *App) renderRepo() string    { return renderRepoView(a) }
 func (a *App) renderTrend() string   { return renderTrendView(a) }
 
-func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache) error {
-	app := New(syncer, stats, repos, rawCache)
+func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache, statsCache *cache.StatsCache) error {
+	app := New(syncer, stats, repos, rawCache, statsCache)
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err

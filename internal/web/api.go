@@ -1,12 +1,14 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jimyag/commitlens/internal/config"
 )
 
 func (s *Server) registerAPI() {
@@ -33,14 +35,28 @@ func (s *Server) handleGetStats(c *gin.Context) {
 }
 
 func (s *Server) handleGetRepos(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"repos": s.repos})
+	c.JSON(http.StatusOK, gin.H{"repos": s.repoNames})
 }
 
 func (s *Server) handleSync(c *gin.Context) {
-	// Sync is now based on config objects, which we don't have here easily.
-	// For simplicity, we might need to refactor Syncer to find repo by ID.
-	// But let's skip individual sync via API for now or implement it later.
-	c.JSON(http.StatusNotImplemented, gin.H{"message": "individual sync via web not implemented in this version"})
+	repoID := c.Query("repo")
+	go func() {
+		if repoID != "" {
+			var target *config.Repository
+			for _, r := range s.repos {
+				if r.ID() == repoID {
+					target = &r
+					break
+				}
+			}
+			if target != nil {
+				_ = s.syncer.SyncRepo(context.Background(), *target)
+			}
+		} else {
+			s.syncer.SyncAll(context.Background(), s.repos, nil, 5)
+		}
+	}()
+	c.JSON(http.StatusAccepted, gin.H{"message": "sync started"})
 }
 
 // CommitInfo 是对外暴露的提交摘要。
@@ -80,7 +96,7 @@ func (s *Server) handleGetCommits(c *gin.Context) {
 		to, hasTo = t, true
 	}
 
-	repos := s.repos
+	repos := s.repoNames
 	if repo != "" {
 		repos = []string{repo}
 	}
