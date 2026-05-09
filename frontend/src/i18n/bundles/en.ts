@@ -11,13 +11,14 @@ export const en = {
   'app.syncing': 'Syncing…',
   'app.refresh': 'Refresh',
   'app.lastSync': 'Last updated:',
+  'app.scope.multifmt': '{n} selected',
   'app.section.trendTitle': 'Code submission trend',
   'app.section.trendDesc':
     'Top: repo-wide commit counts per period (labels on bars). Below: one row per contributor. Hover a bar for that period; bottom slider pans/zooms the time range.',
   'app.section.rankTitle': 'Contributors',
 
   'table.contributor': 'Contributor',
-  'table.prs': 'PRs', // We might still use this in some contexts, but let's hide it in ranking
+  'table.prs': 'PRs', // We might still use this in some contexts, but let's hide in ranking
   'table.commits': 'Commits',
   'table.added': 'Lines +',
   'table.deleted': 'Lines −',
@@ -37,6 +38,7 @@ export const en = {
   'nav.prs': 'Commits',
 
   'filter.allUsers': 'All contributors',
+  'filter.multiUsers': '{n} selected',
 
   'prPage.back': '← Back',
   'prPage.allPRs': 'Commit History',

@@ -13,6 +13,7 @@ export const zh: Record<keyof typeof en, string> = {
   'app.syncing': '同步中…',
   'app.refresh': '刷新',
   'app.lastSync': '最后同步：',
+  'app.scope.multifmt': '已选 {n} 个',
   'app.section.trendTitle': '代码提交趋势',
   'app.section.trendDesc':
     '上方：各周期全仓库提交总数（柱顶数字）。下方：各贡献者明细。悬停可查看详情；底部滑块可缩放时间范围。',
@@ -38,6 +39,7 @@ export const zh: Record<keyof typeof en, string> = {
   'nav.prs': '提交历史',
 
   'filter.allUsers': '全部贡献者',
+  'filter.multiUsers': '已选 {n} 人',
 
   'prPage.back': '← 返回',
   'prPage.allPRs': '代码提交记录',
