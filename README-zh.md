@@ -1,100 +1,79 @@
 # CommitLens
 
-统计 GitHub 仓库中各贡献者的合并 PR、提交与增删行，提供**终端 TUI**与**嵌入式 Web** 两种界面。
+一个通用的 Git 贡献分析工具，深度追踪每位贡献者的**提交数**、**新增行数**与**删除行数**。它拥有强大的本地 Git 分析引擎、极速的终端 TUI 界面，以及嵌入在单一二进制文件中的现代化 Web UI。
 
-**[English README →](./README.md)**
+![TUI 概览](docs/screenshots/tui-contributors.png)
 
-## 功能概览
+## 核心功能
 
-- 从 GitHub API 拉取已合并 PR、PR 提交与 diff 统计，结果缓存在本地。
-- **贡献者排行**：PR 数、Commit 数、增删行。
-- **PR 趋势**：按周/月/季/年聚合；可单仓或多仓；支持合著者（见下）。
-- **合著者（Co-authored-by）**：在 PR 各条 commit 的 message 中解析 `Co-authored-by: … <邮箱>`。仅当邮箱为 GitHub `users.noreply.github.com` 形式（含 `数字id+用户名@`）时解析为登录名；同一 PR 内同一用户只计一次。主作者与合著者均计入 **PR 数、Commit 数、增删行**（协作 PR 下多人头上有重复计行为预期表现）。
+- **通用 Git 引擎**：同时支持本地文件系统仓库和远程 GitHub 仓库 URL（通过自动 Bare Clone）。分析历史记录无需担心 GitHub API 速率限制。
+- **高级过滤查询**：支持仓库和贡献者的**多选**过滤。可按周、月、季度或年进行下钻分析。
+- **贡献趋势分析**：
+  - **提交量趋势**：直观展示历史活跃度。
+  - **代码行数趋势**：通过堆叠柱状图追踪代码产出与重构力度（新增/删除行）。
+- **交互式 TUI**：由 `bubbletea` 驱动的极速、全键盘操作终端界面。
+- **现代化 Web UI**：基于 React + ECharts 的响应式界面，支持搜索、滚动和高密度数据展示。
+- **多作者识别**：基于 `Co-authored-by` 准确计算所有贡献者的功劳。
+- **单二进制部署**：前端资源编译进二进制文件，一个文件即开即用。
+- **生产级 CI/CD**：集成 GitHub Actions 与 GoReleaser，实现多平台自动构建发布。
 
-## 界面预览
-
-以下示例为仓库 **`kubeovn/kube-ovn`** 的统计界面（随开发过程截取，供参考；实际以你本机数据与粒度为准）。
+## 界面截图
 
 ### 终端 TUI
-
-单仓、**按「月」**聚合的合并 PR 趋势与选中贡献者个人柱图（左右分栏，底栏可横滚）：
-
-![CommitLens 终端 TUI：kube-ovn 按月的全仓与个人 PR 趋势](docs/screenshots/tui-kube-ovn-monthly-pr-trends.png)
+| 提交趋势 | 提交历史 |
+| :---: | :---: |
+| ![TUI Trend](docs/screenshots/tui-trend.png) | ![TUI Commits](docs/screenshots/tui-commits.png) |
 
 ### Web 界面
+| 仪表盘 (提交) | 行数趋势 | 提交历史 |
+| :---: | :---: | :---: |
+| ![Web Commit Trend](docs/screenshots/web-trend-commits.png) | ![Web Lines Trend](docs/screenshots/web-trend-lines.png) | ![Web Commits](docs/screenshots/web-commits.png) |
 
-**按周**：上方为全仓库各周期柱顶 PR 数，下方按贡献者分行柱图，底部滑块可横向浏览更多周期。
+## 快速开始
 
-![CommitLens Web：kube-ovn 按周的全仓与贡献者 PR 趋势](docs/screenshots/web-kube-ovn-weekly-pr-trends.png)
+### 安装
+从 [Releases](https://github.com/jimyag/commitlens/releases) 下载最新版本的二进制文件。
 
-**按季**：与按周相同布局，横轴为季度刻度。
-
-![CommitLens Web：kube-ovn 按季的全仓与贡献者 PR 趋势](docs/screenshots/web-kube-ovn-quarterly-pr-trends.png)
-
-## 构建
-
-需安装 **Go**（版本以 `go.mod` 为准）、**Node.js**（用于打前端包）。
-
-```bash
-make build    # 先 npm build 前端，再 go build 生成 ./commitlens
+### 配置
+创建一个 `config.yaml`：
+```yaml
+discoveryRoots:
+  - ~/src/github.com/kubernetes  # 自动扫描此目录下所有 git 仓库
+repositories:
+  - url: https://github.com/kubeovn/kube-ovn.git # 远程仓库
+userMap:
+  "Jim Yang": ["jimyag", "yang.jim@example.com"] # 将多个别名映射到同一个自然人
 ```
 
-或：
-
+### 使用
 ```bash
-cd frontend && npm install && npm run build
-go build -o commitlens .
+# 启动终端 TUI
+./commitlens --config config.yaml
+
+# 启动 Web UI (默认端口: 8080)
+./commitlens --web --config config.yaml
 ```
 
-## 配置
-
-复制示例并编辑：
-
-```bash
-cp config.example.yaml ~/.commitlens/config.yaml
-```
-
-主要字段：
-
-| 项 | 说明 |
-|----|------|
-| `github.token` | 可留空，默认使用 `gh auth token` |
-| `repositories` | 要统计的 `owner` / `repo` 列表 |
-| `cache.dir` | 原始 PR 与统计结果缓存目录 |
-| `web.port` | Web 模式端口（与命令行 `--port` 二选一） |
-
-## 使用
-
-**终端（默认 TUI）**：
-
-```bash
-./commitlens --config /path/to/config.yaml
-# 或
-make run
-```
-
-**Web 界面**：
-
-```bash
-./commitlens --web --port 8080 --config /path/to/config.yaml
-# 或
-make run-web
-```
-
-首次运行会拉取并同步数据；在 TUI / Web 中可触发刷新。统计逻辑见 `internal/stats`（合著者解析见 `coauthor.go`）。
+## 快捷键 (TUI)
+- `1-5`: 切换标签页 (汇总, 仓库, 提交趋势, 行数趋势, 提交列表)。
+- `[` / `]`: 轮换标签页。
+- `Tab`: 在过滤器与内容区之间切换焦点。
+- `Enter`: 展开过滤器下拉框 / 查看提交详情。
+- `Space`: 在下拉列表中进行多选。
+- `Shift + ←/→`: 左右横移缩放趋势图。
+- `R`: 强制同步/刷新数据。
+- `Q`: 退出。
 
 ## 开发
 
+### 依赖
+- Go 1.22+
+- Node.js 20+ & npm
+
+### 从源码编译
 ```bash
-make test     # go test ./...
-cd frontend && npm run lint
+make build
 ```
 
-## 项目结构（节选）
-
-- `cmd/` — CLI 与同步流程
-- `internal/github/` — GitHub 客户端
-- `internal/stats/` — 聚合与 Co-authored-by
-- `internal/tui/` — Bubble Tea 终端 UI
-- `internal/web/` — 嵌入前端的 HTTP API
-- `frontend/` — Vite + React 前端，经 `//go:embed` 打入二进制
+## 许可证
+MIT
