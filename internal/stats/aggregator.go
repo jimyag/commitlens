@@ -60,8 +60,14 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 		week := WeekKey(commit.Date)
 		w := getOrCreateWeek(result.Weekly, week)
 		w.TotalCommits++
+		w.TotalAdditions += commit.Additions
+		w.TotalDeletions += commit.Deletions
+
 		for login := range uniqueInCommit {
-			w.Contributors[login]++
+			cw := getOrCreateContributorWeekly(w.Contributors, login)
+			cw.Commits++
+			cw.Additions += commit.Additions
+			cw.Deletions += commit.Deletions
 		}
 	}
 
@@ -81,8 +87,17 @@ func getOrCreateWeek(m map[string]*cache.WeeklyEntry, key string) *cache.WeeklyE
 	if v, ok := m[key]; ok {
 		return v
 	}
-	v := &cache.WeeklyEntry{Contributors: make(map[string]int)}
+	v := &cache.WeeklyEntry{Contributors: make(map[string]*cache.ContributorWeeklyStats)}
 	m[key] = v
+	return v
+}
+
+func getOrCreateContributorWeekly(m map[string]*cache.ContributorWeeklyStats, login string) *cache.ContributorWeeklyStats {
+	if v, ok := m[login]; ok {
+		return v
+	}
+	v := &cache.ContributorWeeklyStats{}
+	m[login] = v
 	return v
 }
 

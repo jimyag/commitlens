@@ -185,6 +185,12 @@ export function Layout() {
             {t('nav.dashboard')}
           </NavLink>
           <NavLink
+            to={{ pathname: '/lines', search: searchParams.toString() }}
+            style={({ isActive }) => navLinkStyle(isActive)}
+          >
+            {t('app.section.linesTrend')}
+          </NavLink>
+          <NavLink
             to={{ pathname: '/prs', search: (() => { const p = new URLSearchParams(searchParams); p.delete('period'); return p.toString() })() }}
             style={({ isActive }) => navLinkStyle(isActive)}
           >

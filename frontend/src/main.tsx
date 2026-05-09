@@ -16,6 +16,7 @@ createRoot(document.getElementById('root')!).render(
           <Routes>
             <Route element={<Layout />}>
               <Route path="/" element={<App />} />
+              <Route path="/lines" element={<App metric="lines" />} />
               <Route path="/prs" element={<PRListPage />} />
             </Route>
           </Routes>

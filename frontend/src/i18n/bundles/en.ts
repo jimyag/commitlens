@@ -12,9 +12,10 @@ export const en = {
   'app.refresh': 'Refresh',
   'app.lastSync': 'Last updated:',
   'app.scope.multifmt': '{n} selected',
-  'app.section.trendTitle': 'Code submission trend',
+  'app.section.trendTitle': 'Commit trend',
+  'app.section.linesTrend': 'Lines trend',
   'app.section.trendDesc':
-    'Top: repo-wide commit counts per period (labels on bars). Below: one row per contributor. Hover a bar for that period; bottom slider pans/zooms the time range.',
+    'Top: repo-wide totals per period. Below: one row per contributor. Hover a bar for details; top slider scrolls the timeline.',
   'app.section.rankTitle': 'Contributors',
 
   'table.contributor': 'Contributor',

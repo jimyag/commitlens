@@ -23,10 +23,18 @@ export function mergeWeekly(statsList: (StatsData | undefined)[]): Record<string
   for (const s of statsList) {
     if (!s?.weekly) continue
     for (const [k, v] of Object.entries(s.weekly)) {
-      if (!merged[k]) merged[k] = { total_commits: 0, contributors: {} }
+      if (!merged[k]) merged[k] = { total_commits: 0, total_additions: 0, total_deletions: 0, contributors: {} }
       merged[k].total_commits += v.total_commits
-      for (const [login, count] of Object.entries(v.contributors)) {
-        merged[k].contributors[login] = (merged[k].contributors[login] ?? 0) + count
+      merged[k].total_additions += v.total_additions
+      merged[k].total_deletions += v.total_deletions
+      for (const [login, stats] of Object.entries(v.contributors)) {
+        if (!merged[k].contributors[login]) {
+          merged[k].contributors[login] = { ...stats }
+        } else {
+          merged[k].contributors[login].commits += stats.commits
+          merged[k].contributors[login].additions += stats.additions
+          merged[k].contributors[login].deletions += stats.deletions
+        }
       }
     }
   }

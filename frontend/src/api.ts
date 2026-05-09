@@ -8,9 +8,17 @@ export interface ContributorStats {
   deletions: number
 }
 
+export interface ContributorWeeklyStats {
+  commits: number
+  additions: number
+  deletions: number
+}
+
 export interface WeeklyEntry {
   total_commits: number
-  contributors: Record<string, number>
+  total_additions: number
+  total_deletions: number
+  contributors: Record<string, ContributorWeeklyStats>
 }
 
 export interface StatsData {

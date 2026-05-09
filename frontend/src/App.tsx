@@ -14,7 +14,7 @@ const granularityKey: Record<Granularity, MessageKey> = {
   year: 'app.granularity.year',
 }
 
-export default function App() {
+export default function App({ metric = 'commits' }: { metric?: 'commits' | 'lines' }) {
   const { allStats } = useApp()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -41,9 +41,6 @@ export default function App() {
     const merged = mergeContributors(filteredStats)
     if (selectedLogins.length === 0) return merged
     
-    // If specific logins are selected, we might want to filter the table too, 
-    // but the user mostly complained about the chart. 
-    // Let's filter the table to match the chart's focus.
     const filtered: Record<string, any> = {}
     selectedLogins.forEach(l => {
       if (merged[l]) filtered[l] = merged[l]
@@ -57,18 +54,19 @@ export default function App() {
     const next = new URLSearchParams(searchParams)
     next.set('period', period)
     if (login) {
-      // If we clicked a personal bar, we probably want to focus on that person
       next.set('login', login)
     }
     navigate('/prs?' + next.toString())
   }
+
+  const titleKey: MessageKey = metric === 'commits' ? 'app.section.trendTitle' : 'app.section.linesTrend'
 
   return (
     <div style={{ padding: '20px 5% 32px' }}>
       <section style={{ marginBottom: 40 }}>
         <div style={{ marginBottom: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 6px', color: '#374151' }}>
-            {t('app.section.trendTitle')}
+            {t(titleKey)}
           </h2>
           <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>{t('app.section.trendDesc')}</p>
           <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
@@ -79,6 +77,7 @@ export default function App() {
           <TrendChart
             weekly={weekly}
             granularity={gran}
+            metric={metric}
             contributors={contributors}
             selectedLogins={selectedLogins}
             onBarClick={handleBarClick}

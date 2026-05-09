@@ -412,7 +412,7 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 }
 
 type periodEntry struct {
-	totalCommits         int
+	totalCommits  int
 	byContributor map[string]int
 }
 
@@ -425,8 +425,8 @@ func aggregatePeriods(a *App) map[string]*periodEntry {
 				result[period] = &periodEntry{byContributor: make(map[string]int)}
 			}
 			result[period].totalCommits += w.TotalCommits
-			for login, count := range w.Contributors {
-				result[period].byContributor[login] += count
+			for login, stats := range w.Contributors {
+				result[period].byContributor[login] += stats.Commits
 			}
 		}
 	}

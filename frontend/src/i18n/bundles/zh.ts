@@ -14,9 +14,10 @@ export const zh: Record<keyof typeof en, string> = {
   'app.refresh': '刷新',
   'app.lastSync': '最后同步：',
   'app.scope.multifmt': '已选 {n} 个',
-  'app.section.trendTitle': '代码提交趋势',
+  'app.section.trendTitle': '提交数趋势',
+  'app.section.linesTrend': '代码行数趋势',
   'app.section.trendDesc':
-    '上方：各周期全仓库提交总数（柱顶数字）。下方：各贡献者明细。悬停可查看详情；底部滑块可缩放时间范围。',
+    '上方：各周期全仓库总量。下方：各贡献者明细。悬停查看详情；顶部滑块可左右滚动。',
   'app.section.rankTitle': '贡献者排行榜',
 
   'table.contributor': '贡献者',

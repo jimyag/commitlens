@@ -27,6 +27,8 @@ interface Props {
 }
 const BAR_COLOR_TOTAL = '#6366f1'
 const BAR_COLOR_PERSON = '#16a34a'
+const BAR_COLOR_ADD = '#10b981'
+const BAR_COLOR_DEL = '#ef4444'
 
 const AXIS = '#6b7280'
 const AXISLINE = '#e5e7eb'
@@ -176,15 +178,25 @@ function buildTrendOption(
   l10n: L10n,
 ) {
   const { t } = l10n
-  const periodMap: Record<string, { total: number; add: number; del: number; byLogin: Record<string, {c:number, a:number, d:number}> }> = {}
+  const periodMap: Record<string, { 
+    total_c: number; 
+    total_a: number; 
+    total_d: number; 
+    byLogin: Record<string, {c:number, a:number, d:number}> 
+  }> = {}
 
   for (const [weekKey, entry] of Object.entries(weekly)) {
     const period = toPeriodKey(weekKey, granularity)
-    if (!periodMap[period]) periodMap[period] = { total: 0, add: 0, del: 0, byLogin: {} }
-    periodMap[period].total += entry.total_commits
-    for (const [login, count] of Object.entries(entry.contributors)) {
+    if (!periodMap[period]) periodMap[period] = { total_c: 0, total_a: 0, total_d: 0, byLogin: {} }
+    periodMap[period].total_c += entry.total_commits
+    periodMap[period].total_a += entry.total_additions
+    periodMap[period].total_d += entry.total_deletions
+    
+    for (const [login, stats] of Object.entries(entry.contributors)) {
       if (!periodMap[period].byLogin[login]) periodMap[period].byLogin[login] = {c:0, a:0, d:0}
-      periodMap[period].byLogin[login].c += count
+      periodMap[period].byLogin[login].c += stats.commits
+      periodMap[period].byLogin[login].a += stats.additions
+      periodMap[period].byLogin[login].d += stats.deletions
     }
   }
 
@@ -251,7 +263,7 @@ function buildTrendOption(
   yAxes.push({
     type: 'value',
     gridIndex: 0,
-    name: metric === 'commits' ? t('chart.repoWide') : 'Lines',
+    name: metric === 'commits' ? t('chart.repoWide') : 'Lines (+/-)',
     nameTextStyle: { color: AXIS, fontSize: 11, fontWeight: 600 },
     min: 0,
     splitLine: { lineStyle: { color: '#f3f4f6' } },
@@ -263,19 +275,30 @@ function buildTrendOption(
       type: 'bar',
       xAxisIndex: 0,
       yAxisIndex: 0,
-      data: periods.map(p => periodMap[p].total),
+      data: periods.map(p => periodMap[p].total_c),
       itemStyle: { color: BAR_COLOR_TOTAL },
       barMaxWidth: 20,
       label: barValueLabel({ color: '#4f46e5' }),
     })
   } else {
     series.push({
-      name: 'Total Activity',
+      name: 'Total Additions',
       type: 'bar',
+      stack: 'total',
       xAxisIndex: 0,
       yAxisIndex: 0,
-      data: periods.map(p => periodMap[p].total),
-      itemStyle: { color: BAR_COLOR_TOTAL },
+      data: periods.map(p => periodMap[p].total_a),
+      itemStyle: { color: BAR_COLOR_ADD },
+      barMaxWidth: 20,
+    })
+    series.push({
+      name: 'Total Deletions',
+      type: 'bar',
+      stack: 'total',
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data: periods.map(p => -(periodMap[p].total_d ?? 0)),
+      itemStyle: { color: BAR_COLOR_DEL },
       barMaxWidth: 20,
     })
   }
@@ -285,7 +308,7 @@ function buildTrendOption(
   for (let i = 0; i < logins.length; i++) {
     const gi = 1 + i
     const login = logins[i]
-    const rowData = periods.map(p => periodMap[p].byLogin[login]?.c ?? 0)
+    
     const showXLabel = i === logins.length - 1
     const h = showXLabel ? personH + xLabelExtra : personH
     grids.push({ left: leftInner, right: R_PAD, top: y, width: 'auto', height: h, containLabel: false })
@@ -305,16 +328,39 @@ function buildTrendOption(
     const avatarUrl = contributors[login]?.avatar_url?.trim() ?? ''
     personRowLabels.push({ login, topPx: y + h / 2, avatarUrl })
     
-    series.push({
-      name: login,
-      type: 'bar',
-      xAxisIndex: gi,
-      yAxisIndex: gi,
-      data: rowData,
-      itemStyle: { color: BAR_COLOR_PERSON, opacity: 0.9 },
-      barMaxWidth: 16,
-      label: barValueLabel({ tiny: true }),
-    })
+    if (metric === 'commits') {
+      series.push({
+        name: login,
+        type: 'bar',
+        xAxisIndex: gi,
+        yAxisIndex: gi,
+        data: periods.map(p => periodMap[p].byLogin[login]?.c ?? 0),
+        itemStyle: { color: BAR_COLOR_PERSON, opacity: 0.9 },
+        barMaxWidth: 16,
+        label: barValueLabel({ tiny: true }),
+      })
+    } else {
+      series.push({
+        name: login + ' (+)',
+        type: 'bar',
+        stack: login,
+        xAxisIndex: gi,
+        yAxisIndex: gi,
+        data: periods.map(p => periodMap[p].byLogin[login]?.a ?? 0),
+        itemStyle: { color: BAR_COLOR_ADD, opacity: 0.8 },
+        barMaxWidth: 16,
+      })
+      series.push({
+        name: login + ' (-)',
+        type: 'bar',
+        stack: login,
+        xAxisIndex: gi,
+        yAxisIndex: gi,
+        data: periods.map(p => -(periodMap[p].byLogin[login]?.d ?? 0)),
+        itemStyle: { color: BAR_COLOR_DEL, opacity: 0.8 },
+        barMaxWidth: 16,
+      })
+    }
     y += h + gapY
   }
 
@@ -333,6 +379,17 @@ function buildTrendOption(
       backgroundColor: 'rgba(17, 24, 39, 0.92)',
       borderWidth: 0,
       textStyle: { color: '#f9fafb', fontSize: 12 },
+      formatter(params: any) {
+        if (!params || params.length === 0) return ''
+        const period = params[0].name
+        let res = `<div style="font-weight:600;margin-bottom:6px">${period}</div>`
+        params.forEach((p: any) => {
+          if (p.value === 0) return
+          const val = Math.abs(p.value)
+          res += `<div>${p.seriesName}: <span style="font-weight:600">${val}</span></div>`
+        })
+        return res
+      }
     },
     dataZoom: [
       {

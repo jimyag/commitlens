@@ -15,9 +15,17 @@ type ContributorStats struct {
 	Deletions   int    `json:"deletions"`
 }
 
+type ContributorWeeklyStats struct {
+	Commits   int `json:"commits"`
+	Additions int `json:"additions"`
+	Deletions int `json:"deletions"`
+}
+
 type WeeklyEntry struct {
-	TotalCommits int            `json:"total_commits"`
-	Contributors map[string]int `json:"contributors"`
+	TotalCommits   int                                `json:"total_commits"`
+	TotalAdditions int                                `json:"total_additions"`
+	TotalDeletions int                                `json:"total_deletions"`
+	Contributors   map[string]*ContributorWeeklyStats `json:"contributors"`
 }
 
 type StatsData struct {
