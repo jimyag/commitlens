@@ -55,14 +55,14 @@ func (c *RawCache) LoadStatus(repo string) (*SyncStatus, error) {
 }
 
 func (c *RawCache) SaveStatus(st *SyncStatus) error {
-	if err := os.MkdirAll(c.dir, 0755); err != nil {
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.statusPath(st.Repo), data, 0644)
+	return os.WriteFile(c.statusPath(st.Repo), data, 0o644)
 }
 
 func (c *RawCache) path(repo string) string {
@@ -82,12 +82,12 @@ func (c *RawCache) Load(repo string) (*RawData, error) {
 }
 
 func (c *RawCache) Save(raw *RawData) error {
-	if err := os.MkdirAll(c.dir, 0755); err != nil {
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(raw, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.path(raw.Repo), data, 0644)
+	return os.WriteFile(c.path(raw.Repo), data, 0o644)
 }

@@ -141,7 +141,7 @@ func renderLinesTrendView(a *App) string {
 
 	// For Deletions, we use a different color (red)
 	addChart := renderBarChart(periods, addValues, chartWidth, 10, false, selIdx, a.globalGranularity)
-	
+
 	// Temporarily swap styles to render deletions in Red
 	oldStyle := barValueStyle
 	barValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("9"))
@@ -345,17 +345,6 @@ func prValuesLineAboveChart(values []float64, cellW, gap int) string {
 	return b.String()
 }
 
-func estimateBarWidth(n, chartW, gap int) int {
-	if n <= 0 {
-		return 1
-	}
-	g := (n - 1) * gap
-	if chartW <= g {
-		return 1
-	}
-	return (chartW - g) / n
-}
-
 func formatVerticalLabel(period string, gran int, barW int) []string {
 	if gran == 0 {
 		var year, week int
@@ -396,10 +385,10 @@ func formatVerticalLabel(period string, gran int, barW int) []string {
 			}
 		}
 	}
-	
+
 	if barW >= len(period) {
 		return []string{period}
-	} else if barW >= 4 && len(period) == 7 { 
+	} else if barW >= 4 && len(period) == 7 {
 		return []string{period[:4], period[5:]}
 	} else if barW >= 2 {
 		var lines []string
@@ -481,13 +470,14 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 	}
 	gap := pickBarGap(n, width)
 	data := barDataFromPeriods(periods, values, width, gap, person, selIdx)
-	m := barchart.New(width, height,
+	m := barchart.New(
+		width, height,
 		barchart.WithDataSet(data),
 		barchart.WithStyles(barAxisStyle, barLabelStyle),
 		barchart.WithBarGap(gap),
 	)
 	m.Draw()
-	
+
 	view := m.View()
 	lines := strings.Split(strings.TrimRight(view, "\n"), "\n")
 	if len(lines) > 0 {
@@ -499,7 +489,7 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 		cellW = 1
 	}
 	g := m.BarGap()
-	
+
 	customLabels := buildCustomLabels(periods, gran, cellW, g)
 	lines = append(lines, customLabels)
 

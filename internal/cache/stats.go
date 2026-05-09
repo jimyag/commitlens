@@ -64,12 +64,12 @@ func (c *StatsCache) Load(repo string) (*StatsData, error) {
 }
 
 func (c *StatsCache) Save(stats *StatsData) error {
-	if err := os.MkdirAll(c.dir, 0755); err != nil {
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(stats, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(c.path(stats.Repo), data, 0644)
+	return os.WriteFile(c.path(stats.Repo), data, 0o644)
 }

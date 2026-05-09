@@ -34,11 +34,13 @@ jobs:
           go-version: stable
           cache-dependency-path: go.sum
 
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
       - name: go mod tidy
         run: go mod tidy
-
-      - name: go vet
-        run: go vet ./...
 
       - name: go test
         run: |

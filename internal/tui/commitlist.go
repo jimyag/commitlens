@@ -10,12 +10,10 @@ import (
 )
 
 var (
-	commitListHeaderStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
 	commitListSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
-	commitListTitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
 	commitListHintStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	commitListFilterBoxStyle      = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
+	commitListFilterBoxStyle       = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
 	commitListFilterBoxActiveStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("205"))
 	commitListFilterLabelStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	commitListFilterValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
@@ -49,7 +47,7 @@ func (a *App) renderCommitList() string {
 	}
 
 	// Table header
-	multiRepo := (a.globalRepoMulti != nil && len(a.globalRepoMulti) > 1) || len(a.repoNames) > 1
+	multiRepo := len(a.globalRepoMulti) > 1 || len(a.repoNames) > 1
 
 	cols := []string{}
 	if multiRepo {
@@ -88,7 +86,7 @@ func (a *App) renderCommitList() string {
 		if multiRepo {
 			row.WriteString(commitListColRepoStyle.Render(ansi.Truncate(c.Repo, 13, "...")))
 		}
-		
+
 		shortSHA := c.SHA
 		if len(shortSHA) > 7 {
 			shortSHA = shortSHA[:7]
@@ -96,10 +94,12 @@ func (a *App) renderCommitList() string {
 		// Wrap SHA in brackets. Width is 12, content is "[1234567]" (9 chars). Padding is 2.
 		// Total content width 11. 11 < 12, so it fits.
 		row.WriteString(commitListColPRStyle.Render(fmt.Sprintf("[%s]", shortSHA)))
-		
+
 		// Sanitize title to remove potential newlines/control characters
 		title := strings.Map(func(r rune) rune {
-			if r < 32 { return -1 }
+			if r < 32 {
+				return -1
+			}
 			return r
 		}, c.Title)
 		row.WriteString(commitListColTitleStyle.Render(ansi.Truncate(title, 38, "...")))
@@ -109,7 +109,8 @@ func (a *App) renderCommitList() string {
 
 		row.WriteString(commitListColDateStyle.Render(c.Date.Format("2006-01-02")))
 
-		linesText := fmt.Sprintf("%s %s",
+		linesText := fmt.Sprintf(
+			"%s %s",
 			lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("+%d", c.Additions)),
 			lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("-%d", c.Deletions)),
 		)

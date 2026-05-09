@@ -43,7 +43,7 @@ func EnsureRepo(ctx context.Context, repo config.Repository, token, cacheDir str
 			onProgress("cloning repository...")
 		}
 		// Clone bare
-		if err := os.MkdirAll(filepath.Dir(destDir), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
 			return "", err
 		}
 		cmd := exec.CommandContext(ctx, "git", "clone", "--bare", url, destDir)

@@ -130,12 +130,12 @@ func (s *Server) handleGetCommits(c *gin.Context) {
 					continue
 				}
 			}
-			
+
 			participants := commit.Participants
 			if len(participants) == 0 {
 				participants = []string{commit.Author}
 			}
-			
+
 			result = append(result, CommitInfo{
 				Repo:         r,
 				SHA:          commit.SHA,

@@ -112,7 +112,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		s := msg.String()
-		
+
 		// Handle typing for search if expanded
 		if a.globalFocus == 2 && a.globalLoginExpanded && len(s) == 1 {
 			// Only alphanumeric or punctuation (printable)
@@ -318,7 +318,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if a.globalFocus == 2 {
 				if !a.globalLoginExpanded {
-					// No horizontal cycle for multi-select contributors anymore? 
+					// No horizontal cycle for multi-select contributors anymore?
 					// Keep it simple for now.
 				}
 			} else if a.globalFocus == 3 {
@@ -496,12 +496,12 @@ func (a *App) fetchCommits(period string) []commitItem {
 					continue
 				}
 			}
-			
+
 			participants := commit.Participants
 			if len(participants) == 0 {
 				participants = []string{commit.Author}
 			}
-			
+
 			// Filter by global multi-select logins
 			if len(a.globalLoginMulti) > 0 {
 				found := false
@@ -515,7 +515,7 @@ func (a *App) fetchCommits(period string) []commitItem {
 					continue
 				}
 			}
-			
+
 			out = append(out, commitItem{
 				Repo:         s.Repo,
 				SHA:          commit.SHA,
@@ -537,7 +537,7 @@ func (a *App) fetchCommits(period string) []commitItem {
 func (a *App) doSync() tea.Cmd {
 	return func() tea.Msg {
 		a.syncer.SyncAll(context.Background(), a.repos, nil, 5)
-		
+
 		// Reload stats
 		var newStats []*cache.StatsData
 		for _, name := range a.repoNames {
@@ -550,8 +550,6 @@ func (a *App) doSync() tea.Cmd {
 		return syncDoneMsg{err: nil}
 	}
 }
-
-func (a *App) nRepos() int { return len(a.repoNames) }
 
 const trendHScrollStep = 8
 
@@ -659,8 +657,8 @@ func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Reposito
 var (
 	globalFilterBoxStyle       = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
 	globalFilterBoxActiveStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("205"))
-	globalFilterLabelStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	globalFilterValueStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
+	globalFilterLabelStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	globalFilterValueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
 )
 
 func (a *App) visibleRepoIndices() []int {

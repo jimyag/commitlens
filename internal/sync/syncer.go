@@ -25,15 +25,15 @@ func New(cfg *config.Config, rawCache *cache.RawCache, statsCache *cache.StatsCa
 
 // Progress is emitted during sync to report real-time status.
 type Progress struct {
-	Repo        string
-	RepoIndex   int
-	RepoTotal   int
-	PRsFetched  int // Will be used for commits now
-	PRsTotal    int
-	ListPage    int
-	Log         string
-	Err         error
-	Done        bool
+	Repo       string
+	RepoIndex  int
+	RepoTotal  int
+	PRsFetched int // Will be used for commits now
+	PRsTotal   int
+	ListPage   int
+	Log        string
+	Err        error
+	Done       bool
 }
 
 type FetchProgress struct {
@@ -61,10 +61,10 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []config.Repository, progres
 			if progress != nil {
 				onProg = func(p FetchProgress) {
 					progress <- Progress{
-						Repo:       repoID,
-						RepoIndex:  i + 1,
-						RepoTotal:  len(repos),
-						Log:        p.Log,
+						Repo:      repoID,
+						RepoIndex: i + 1,
+						RepoTotal: len(repos),
+						Log:       p.Log,
 					}
 				}
 			}
@@ -104,7 +104,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, repo config.Repository) error {
 
 func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgress func(FetchProgress)) error {
 	repoID := repo.ID()
-	
+
 	// Check locking
 	status, err := s.rawCache.LoadStatus(repoID)
 	if err == nil && status.Syncing {
@@ -160,7 +160,7 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 		logMsg = "using local repository (recent cache)..."
 	}
 	updateStatus(logMsg)
-	
+
 	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, skipFetch, func(p string) {
 		updateStatus(p)
 	})

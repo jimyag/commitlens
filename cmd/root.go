@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
 	"github.com/jimyag/commitlens/internal/git"
@@ -15,6 +14,7 @@ import (
 	isync "github.com/jimyag/commitlens/internal/sync"
 	"github.com/jimyag/commitlens/internal/tui"
 	"github.com/jimyag/commitlens/internal/web"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -61,7 +61,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(cfg.Cache.Dir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.Cache.Dir, 0o755); err != nil {
 		return fmt.Errorf("create cache directory: %w", err)
 	}
 	locale.Init(cfg.Language)
@@ -96,6 +96,7 @@ func run(cmd *cobra.Command, args []string) error {
 	for _, r := range repos {
 		repoNames = append(repoNames, r.ID())
 	}
+	_ = repoNames // Ensure it's used if only used for initialization or debug later
 
 	var allStats []*cache.StatsData
 	hasRawCache := false

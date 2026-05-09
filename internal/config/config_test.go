@@ -16,7 +16,7 @@ repositories:
   - owner: jimyag
     repo: commitlens
 `
-	os.WriteFile(cfgPath, []byte(content), 0644)
+	os.WriteFile(cfgPath, []byte(content), 0o644)
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {

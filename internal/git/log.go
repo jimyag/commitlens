@@ -19,7 +19,7 @@ var coAuthoredByLine = regexp.MustCompile(`(?mi)^Co-authored-by:\s+(.*?)\s*<.*?>
 func GetCommits(ctx context.Context, gitDir, revRange string) ([]Commit, error) {
 	// COMMIT_BEGIN<NUL>hash<NUL>authorName<NUL>authorEmail<NUL>date<NUL>subject<NUL>body<NUL>COMMIT_HEADER_END
 	format := "COMMIT_BEGIN%x00%H%x00%aN%x00%aE%x00%aI%x00%s%x00%b%x00COMMIT_HEADER_END"
-	
+
 	args := []string{"--git-dir=" + gitDir, "log", "--format=" + format, "--numstat"}
 	if revRange != "" {
 		args = append(args, revRange)
