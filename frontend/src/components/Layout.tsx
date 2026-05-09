@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Outlet, Link, NavLink, useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useI18n, type Lang } from '../i18n/I18nContext'
@@ -26,13 +27,13 @@ const selectStyle: React.CSSProperties = {
 }
 
 export function Layout() {
-  const { repos, allContributors, syncing, lastSyncAt, syncRepo } = useApp()
+  const { repos: allRepoNames, allStats, allContributors, syncing, lastSyncAt, syncRepo } = useApp()
   const { t, lang, setLang } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const repo = searchParams.get('repo') ?? ''
+  const selectedRepo = searchParams.get('repo') ?? ''
   const gran = (searchParams.get('gran') ?? 'week') as Granularity
-  const login = searchParams.get('login') ?? ''
+  const selectedLogin = searchParams.get('login') ?? ''
 
   const patch = (key: string, value: string) => {
     setSearchParams(prev => {
@@ -46,9 +47,25 @@ export function Layout() {
   const timeLocale = lang === 'zh' ? 'zh-CN' : 'en-US'
   const lastSyncStr = lastSyncAt != null ? new Date(lastSyncAt).toLocaleTimeString(timeLocale) : ''
 
-  const contributorList = Object.entries(allContributors)
-    .sort((a, b) => b[1].commit_count - a[1].commit_count)
-    .map(([l]) => l)
+  // 1. 根据选中的用户，过滤可选的仓库列表
+  const filteredRepoNames = useMemo(() => {
+    if (!selectedLogin) return allRepoNames
+    return allStats
+      .filter(s => Object.keys(s.contributors).includes(selectedLogin))
+      .map(s => s.repo)
+  }, [allRepoNames, allStats, selectedLogin])
+
+  // 2. 根据选中的仓库，过滤可选的用户列表
+  const filteredContributorList = useMemo(() => {
+    let source = allContributors
+    if (selectedRepo) {
+      const repoStats = allStats.find(s => s.repo === selectedRepo)
+      source = repoStats?.contributors ?? {}
+    }
+    return Object.entries(source)
+      .sort((a, b) => b[1].commit_count - a[1].commit_count)
+      .map(([l]) => l)
+  }, [allStats, allContributors, selectedRepo])
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#f9fafb' }}>
@@ -89,9 +106,9 @@ export function Layout() {
           </NavLink>
         </nav>
 
-        <select value={repo} onChange={e => patch('repo', e.target.value)} style={selectStyle}>
+        <select value={selectedRepo} onChange={e => patch('repo', e.target.value)} style={selectStyle}>
           <option value="">{t('app.allRepos')}</option>
-          {repos.map(r => <option key={r} value={r}>{r}</option>)}
+          {filteredRepoNames.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
 
         <select value={gran} onChange={e => patch('gran', e.target.value)} style={selectStyle}>
@@ -101,13 +118,13 @@ export function Layout() {
           <option value="year">{t('app.granularity.year')}</option>
         </select>
 
-        <select value={login} onChange={e => patch('login', e.target.value)} style={selectStyle}>
+        <select value={selectedLogin} onChange={e => patch('login', e.target.value)} style={selectStyle}>
           <option value="">{t('filter.allUsers')}</option>
-          {contributorList.map(l => <option key={l} value={l}>{l}</option>)}
+          {filteredContributorList.map(l => <option key={l} value={l}>{l}</option>)}
         </select>
 
         <button
-          onClick={() => syncRepo(repo || undefined)}
+          onClick={() => syncRepo(selectedRepo || undefined)}
           disabled={syncing}
           style={{
             padding: '5px 14px',

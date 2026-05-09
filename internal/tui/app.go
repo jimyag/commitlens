@@ -196,11 +196,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if a.globalRepoExpanded {
 					// Exclusively select this repo
 					a.preserveLoginIdxDuring(func() {
-						a.globalRepoMulti = map[int]struct{}{a.globalRepoCursor: {}}
+						visible := a.visibleRepoIndices()
+						if a.globalRepoCursor >= 0 && a.globalRepoCursor < len(visible) {
+							repoIdx := visible[a.globalRepoCursor]
+							a.globalRepoMulti = map[int]struct{}{repoIdx: {}}
+						}
 						a.globalRepoExpanded = false
 					})
 				} else {
 					a.globalRepoExpanded = true
+					a.globalRepoCursor = 0
 				}
 			} else if a.globalFocus == 2 {
 				if a.globalLoginExpanded {
@@ -229,9 +234,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "space", " ":
 			if a.globalFocus == 0 {
 				if a.globalRepoExpanded {
-					a.toggleGlobalRepo(a.globalRepoCursor)
+					visible := a.visibleRepoIndices()
+					if a.globalRepoCursor >= 0 && a.globalRepoCursor < len(visible) {
+						repoIdx := visible[a.globalRepoCursor]
+						a.toggleGlobalRepo(repoIdx)
+					}
 				} else {
 					a.globalRepoExpanded = true
+					a.globalRepoCursor = 0
 				}
 			} else if a.globalFocus == 2 && a.globalLoginExpanded {
 				a.globalLoginSearch += " "
@@ -278,7 +288,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			} else if a.globalFocus == 0 && a.globalRepoExpanded {
-				if a.globalRepoCursor < len(a.repoNames)-1 {
+				visible := a.visibleRepoIndices()
+				if a.globalRepoCursor < len(visible)-1 {
 					a.globalRepoCursor++
 				}
 			} else if a.globalFocus == 3 {
@@ -640,6 +651,26 @@ var (
 	globalFilterValueStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
 )
 
+func (a *App) visibleRepoIndices() []int {
+	var selectedLogin string
+	logins := a.availableGlobalLogins()
+	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
+		selectedLogin = logins[a.globalLoginIdx]
+	}
+
+	var out []int
+	for i, s := range a.stats {
+		if selectedLogin == "" {
+			out = append(out, i)
+			continue
+		}
+		if _, ok := s.Contributors[selectedLogin]; ok {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 func (a *App) renderGlobalFilters() string {
 	// Repo filter
 	repoVal := locale.T("tui.prlist.filterAll")
@@ -680,11 +711,14 @@ func (a *App) renderGlobalFilters() string {
 	if a.globalRepoExpanded && a.globalFocus == 0 {
 		// Append repo list
 		lines := []string{bar, ""}
-		for i, name := range a.repoNames {
+		visible := a.visibleRepoIndices()
+
+		for i, repoIdx := range visible {
+			name := a.repoNames[repoIdx]
 			mark := "[ ] "
 			if a.globalRepoMulti == nil {
 				mark = "[x] "
-			} else if _, ok := a.globalRepoMulti[i]; ok {
+			} else if _, ok := a.globalRepoMulti[repoIdx]; ok {
 				mark = "[x] "
 			}
 			line := "  " + mark + name
@@ -692,6 +726,9 @@ func (a *App) renderGlobalFilters() string {
 				line = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + mark + name)
 			}
 			lines = append(lines, line)
+		}
+		if len(visible) == 0 {
+			lines = append(lines, "  (No relevant repositories)")
 		}
 		return strings.Join(lines, "\n")
 	} else if a.globalLoginExpanded && a.globalFocus == 2 {
