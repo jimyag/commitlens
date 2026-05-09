@@ -161,7 +161,9 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 	}
 	updateStatus(logMsg)
 	
-	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, skipFetch)
+	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, skipFetch, func(p string) {
+		updateStatus(p)
+	})
 	if err != nil {
 		return fmt.Errorf("ensure repo failed: %w", err)
 	}
