@@ -7,7 +7,7 @@ interface Props {
 
 export function ContributorTable({ contributors }: Props) {
   const { t } = useI18n()
-  const sorted = Object.values(contributors).sort((a, b) => b.pr_count - a.pr_count)
+  const sorted = Object.values(contributors).sort((a, b) => b.commit_count - a.commit_count)
 
   if (sorted.length === 0) {
     return <p style={{ color: '#888' }}>{t('table.empty')}</p>
@@ -20,7 +20,6 @@ export function ContributorTable({ contributors }: Props) {
           <th style={{ textAlign: 'left', padding: '10px 12px', verticalAlign: 'middle' }}>
             {t('table.contributor')}
           </th>
-          <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.prs')}</th>
           <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.commits')}</th>
           <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.added')}</th>
           <th style={{ textAlign: 'right', padding: '10px 12px', verticalAlign: 'middle' }}>{t('table.deleted')}</th>
@@ -45,25 +44,25 @@ export function ContributorTable({ contributors }: Props) {
                   minHeight: 32,
                 }}
               >
-                <img
-                  src={c.avatar_url}
-                  alt={c.login}
-                  width={28}
-                  height={28}
-                  style={{ borderRadius: '50%', border: '1px solid #e5e7eb', flexShrink: 0 }}
-                />
+                {c.avatar_url ? (
+                  <img
+                    src={c.avatar_url}
+                    alt={c.login}
+                    width={28}
+                    height={28}
+                    style={{ borderRadius: '50%', border: '1px solid #e5e7eb', flexShrink: 0 }}
+                  />
+                ) : (
+                  <span style={{
+                    width: 28, height: 28, borderRadius: '50%', background: '#e5e7eb',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, color: '#6b7280', flexShrink: 0,
+                  }}>
+                    {c.login.slice(0, 1).toUpperCase()}
+                  </span>
+                )}
                 <span style={{ fontWeight: 500 }}>{c.login}</span>
               </div>
-            </td>
-            <td
-              style={{
-                textAlign: 'right',
-                padding: '10px 12px',
-                verticalAlign: 'middle',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {c.pr_count}
             </td>
             <td
               style={{

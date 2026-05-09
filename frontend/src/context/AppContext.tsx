@@ -9,7 +9,6 @@ export function mergeContributors(statsList: StatsData[]): Record<string, Contri
       if (!merged[login]) {
         merged[login] = { ...c }
       } else {
-        merged[login].pr_count += c.pr_count
         merged[login].commit_count += c.commit_count
         merged[login].additions += c.additions
         merged[login].deletions += c.deletions
@@ -24,8 +23,8 @@ export function mergeWeekly(statsList: (StatsData | undefined)[]): Record<string
   for (const s of statsList) {
     if (!s?.weekly) continue
     for (const [k, v] of Object.entries(s.weekly)) {
-      if (!merged[k]) merged[k] = { total_prs: 0, contributors: {} }
-      merged[k].total_prs += v.total_prs
+      if (!merged[k]) merged[k] = { total_commits: 0, contributors: {} }
+      merged[k].total_commits += v.total_commits
       for (const [login, count] of Object.entries(v.contributors)) {
         merged[k].contributors[login] = (merged[k].contributors[login] ?? 0) + count
       }

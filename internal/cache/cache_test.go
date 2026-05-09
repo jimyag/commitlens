@@ -1,69 +1,78 @@
 package cache_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jimyag/commitlens/internal/cache"
-	gh "github.com/jimyag/commitlens/internal/github"
+	"github.com/jimyag/commitlens/internal/git"
 )
 
-func TestRawCache_SaveAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	rc := cache.NewRawCache(dir)
+func TestRawCache(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "commitlens-raw-cache")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
 
+	c := cache.NewRawCache(tmpDir)
+	repo := "jimyag/commitlens"
+	now := time.Now().UTC()
 	raw := &cache.RawData{
-		Repo:        "jimyag/commitlens",
-		LastUpdated: time.Now().UTC(),
-		PRs: []gh.PR{
-			{Number: 1, Author: "jimyag", Additions: 100, Deletions: 20},
+		Repo:        repo,
+		LastUpdated: now,
+		Commits: []git.Commit{
+			{SHA: "abc", Author: "jimyag", Message: "feat: something", Date: now},
 		},
 	}
-	if err := rc.Save(raw); err != nil {
-		t.Fatalf("Save() error: %v", err)
+
+	if err := c.Save(raw); err != nil {
+		t.Fatal(err)
 	}
-	loaded, err := rc.Load("jimyag/commitlens")
+
+	loaded, err := c.Load(repo)
 	if err != nil {
-		t.Fatalf("Load() error: %v", err)
+		t.Fatal(err)
 	}
-	if len(loaded.PRs) != 1 {
-		t.Errorf("expected 1 PR, got %d", len(loaded.PRs))
+
+	if loaded.Repo != repo {
+		t.Errorf("expected repo %s, got %s", repo, loaded.Repo)
+	}
+	if len(loaded.Commits) != 1 {
+		t.Errorf("expected 1 commit, got %d", len(loaded.Commits))
 	}
 }
 
-func TestRawCache_Load_NotExist(t *testing.T) {
-	dir := t.TempDir()
-	rc := cache.NewRawCache(dir)
-
-	raw, err := rc.Load("nonexistent/repo")
+func TestStatsCache(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "commitlens-stats-cache")
 	if err != nil {
-		t.Fatalf("Load() should not error on missing file, got: %v", err)
+		t.Fatal(err)
 	}
-	if raw.LastUpdated.IsZero() != true {
-		t.Error("expected zero LastUpdated for missing cache")
-	}
-}
+	defer os.RemoveAll(tmpDir)
 
-func TestStatsCache_SaveAndLoad(t *testing.T) {
-	dir := t.TempDir()
-	sc := cache.NewStatsCache(dir)
-
+	c := cache.NewStatsCache(tmpDir)
+	repo := "jimyag/commitlens"
 	stats := &cache.StatsData{
-		Repo:       "jimyag/commitlens",
-		ComputedAt: time.Now().UTC(),
+		Repo: repo,
 		Contributors: map[string]*cache.ContributorStats{
-			"jimyag": {Login: "jimyag", PRCount: 5, CommitCount: 20, Additions: 500, Deletions: 100},
+			"jimyag": {Login: "jimyag", CommitCount: 5, Additions: 500, Deletions: 100},
 		},
-		Weekly: make(map[string]*cache.WeeklyEntry),
 	}
-	if err := sc.Save(stats); err != nil {
-		t.Fatalf("Save() error: %v", err)
+
+	if err := c.Save(stats); err != nil {
+		t.Fatal(err)
 	}
-	loaded, err := sc.Load("jimyag/commitlens")
+
+	loaded, err := c.Load(repo)
 	if err != nil {
-		t.Fatalf("Load() error: %v", err)
+		t.Fatal(err)
 	}
-	if loaded.Contributors["jimyag"].PRCount != 5 {
-		t.Errorf("expected PRCount 5, got %d", loaded.Contributors["jimyag"].PRCount)
+
+	if loaded.Repo != repo {
+		t.Errorf("expected repo %s, got %s", repo, loaded.Repo)
+	}
+	if loaded.Contributors["jimyag"].CommitCount != 5 {
+		t.Errorf("expected CommitCount 5, got %d", loaded.Contributors["jimyag"].CommitCount)
 	}
 }

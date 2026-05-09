@@ -10,14 +10,13 @@ import (
 type ContributorStats struct {
 	Login       string `json:"login"`
 	AvatarURL   string `json:"avatar_url"`
-	PRCount     int    `json:"pr_count"`
 	CommitCount int    `json:"commit_count"`
 	Additions   int    `json:"additions"`
 	Deletions   int    `json:"deletions"`
 }
 
 type WeeklyEntry struct {
-	TotalPRs     int            `json:"total_prs"`
+	TotalCommits int            `json:"total_commits"`
 	Contributors map[string]int `json:"contributors"`
 }
 

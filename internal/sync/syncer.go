@@ -3,23 +3,23 @@ package sync
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/jimyag/commitlens/internal/cache"
-	gh "github.com/jimyag/commitlens/internal/github"
+	"github.com/jimyag/commitlens/internal/config"
+	"github.com/jimyag/commitlens/internal/git"
 	"github.com/jimyag/commitlens/internal/stats"
 )
 
 type Syncer struct {
-	client     *gh.Client
+	cfg        *config.Config
 	rawCache   *cache.RawCache
 	statsCache *cache.StatsCache
 }
 
-func New(client *gh.Client, rawCache *cache.RawCache, statsCache *cache.StatsCache) *Syncer {
-	return &Syncer{client: client, rawCache: rawCache, statsCache: statsCache}
+func New(cfg *config.Config, rawCache *cache.RawCache, statsCache *cache.StatsCache) *Syncer {
+	return &Syncer{cfg: cfg, rawCache: rawCache, statsCache: statsCache}
 }
 
 // Progress is emitted during sync to report real-time status.
@@ -27,17 +27,19 @@ type Progress struct {
 	Repo        string
 	RepoIndex   int
 	RepoTotal   int
-	PRsFetched  int
-	PRsTotal    int // -1 = listing phase; >=0 in detail phase
+	PRsFetched  int // Will be used for commits now
+	PRsTotal    int
 	ListPage    int
 	Log         string
 	Err         error
 	Done        bool
 }
 
-// SyncAll syncs all repos concurrently (up to repoWorkers at a time).
-// Progress events are sent to the progress channel; the channel is closed when done.
-func (s *Syncer) SyncAll(ctx context.Context, repos []string, progress chan<- Progress, repoWorkers int) {
+type FetchProgress struct {
+	Log string
+}
+
+func (s *Syncer) SyncAll(ctx context.Context, repos []config.Repository, progress chan<- Progress, repoWorkers int) {
 	if repoWorkers <= 0 {
 		repoWorkers = 3
 	}
@@ -53,25 +55,23 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []string, progress chan<- Pr
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			var onPR func(gh.FetchProgress)
+			repoID := repo.ID()
+			var onProg func(FetchProgress)
 			if progress != nil {
-				onPR = func(p gh.FetchProgress) {
+				onProg = func(p FetchProgress) {
 					progress <- Progress{
-						Repo:       repo,
+						Repo:       repoID,
 						RepoIndex:  i + 1,
 						RepoTotal:  len(repos),
-						PRsFetched: p.PRsFetched,
-						PRsTotal:   p.PRsTotal,
-						ListPage:   p.ListPage,
 						Log:        p.Log,
 					}
 				}
 			}
 
-			if err := s.syncRepo(ctx, repo, onPR); err != nil {
+			if err := s.syncRepo(ctx, repo, onProg); err != nil {
 				if progress != nil {
 					progress <- Progress{
-						Repo:      repo,
+						Repo:      repoID,
 						RepoIndex: i + 1,
 						RepoTotal: len(repos),
 						Err:       err,
@@ -82,7 +82,7 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []string, progress chan<- Pr
 
 			if progress != nil {
 				progress <- Progress{
-					Repo:      repo,
+					Repo:      repoID,
 					RepoIndex: i + 1,
 					RepoTotal: len(repos),
 					Done:      true,
@@ -97,88 +97,67 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []string, progress chan<- Pr
 	}
 }
 
-// SyncRepo syncs a single repository (no progress reporting).
-func (s *Syncer) SyncRepo(ctx context.Context, repo string) error {
+func (s *Syncer) SyncRepo(ctx context.Context, repo config.Repository) error {
 	return s.syncRepo(ctx, repo, nil)
 }
 
-// mergePRs merges newPRs into existing, deduplicating by PR number.
-// newPRs are placed first (they have fresher data).
-func mergePRs(newPRs, existing []gh.PR) []gh.PR {
-	seen := make(map[int]struct{}, len(newPRs))
-	for _, pr := range newPRs {
-		seen[pr.Number] = struct{}{}
-	}
-	result := make([]gh.PR, 0, len(newPRs)+len(existing))
-	result = append(result, newPRs...)
-	for _, pr := range existing {
-		if _, ok := seen[pr.Number]; !ok {
-			result = append(result, pr)
-		}
-	}
-	return result
-}
-
-// mergeCommits merges newCommits into existing, deduplicating by SHA.
-func mergeCommits(newCommits, existing []gh.Commit) []gh.Commit {
-	seen := make(map[string]struct{}, len(newCommits))
-	for _, c := range newCommits {
-		seen[c.SHA] = struct{}{}
-	}
-	result := make([]gh.Commit, 0, len(newCommits)+len(existing))
-	result = append(result, newCommits...)
-	for _, c := range existing {
-		if _, ok := seen[c.SHA]; !ok {
-			result = append(result, c)
-		}
-	}
-	return result
-}
-
-func (s *Syncer) syncRepo(ctx context.Context, repo string, onProgress func(gh.FetchProgress)) error {
-	parts := strings.SplitN(repo, "/", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid repo format: %s", repo)
-	}
-	owner, name := parts[0], parts[1]
-
-	raw, err := s.rawCache.Load(repo)
+func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgress func(FetchProgress)) error {
+	repoID := repo.ID()
+	
+	raw, err := s.rawCache.Load(repoID)
 	if err != nil {
 		return fmt.Errorf("load raw cache: %w", err)
 	}
 
-	// Zero time means fetch all history (first sync).
-	// Subsequent syncs use last_updated as the cutoff.
-	since := raw.LastUpdated
-
-	newPRs, err := s.client.GetMergedPRsSince(ctx, owner, name, since, onProgress)
-	if err != nil {
-		return fmt.Errorf("fetch PRs: %w", err)
+	// Lazy Fetch: if updated within the last 5 minutes, skip git fetch.
+	skipFetch := false
+	if !raw.LastUpdated.IsZero() && time.Since(raw.LastUpdated) < 5*time.Minute {
+		skipFetch = true
 	}
 
-	directSince := since
-	if !raw.InitialDirectSync {
-		directSince = time.Time{}
+	if onProgress != nil {
+		log := "ensuring local repository..."
+		if skipFetch {
+			log = "using local repository (lazy mode)..."
+		}
+		onProgress(FetchProgress{Log: log})
 	}
-
-	newCommits, nextCursor, err := s.client.GetDirectCommitsSince(ctx, owner, name, directSince, raw.DirectCommitsCursor, onProgress)
 	
-	// Always merge whatever we fetched, even if there's an error partway through.
-	raw.PRs = mergePRs(newPRs, raw.PRs)
-	if len(newCommits) > 0 {
-		raw.DirectCommits = mergeCommits(newCommits, raw.DirectCommits)
-	}
-
+	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, skipFetch)
 	if err != nil {
-		raw.DirectCommitsCursor = nextCursor
-		// Save partial progress
-		_ = s.rawCache.Save(raw)
-		return fmt.Errorf("fetch direct commits (partial): %w", err)
+		return fmt.Errorf("ensure repo failed: %w", err)
 	}
 
-	raw.DirectCommitsCursor = "" // Fully done
-	raw.InitialDirectSync = true
+	revRange := ""
+	if len(raw.Commits) > 0 {
+		// Incremental: get commits from latest_sha..HEAD
+		// raw.Commits is newest to oldest, so the first one is the latest.
+		latestSHA := raw.Commits[0].SHA
+		revRange = fmt.Sprintf("%s..HEAD", latestSHA)
+	}
+
+	if onProgress != nil {
+		onProgress(FetchProgress{Log: "extracting commits..."})
+	}
+
+	newCommits, err := git.GetCommits(ctx, gitDir, revRange)
+	if err != nil {
+		// If revRange failed (e.g. latestSHA no longer in repo), fallback to full scan
+		newCommits, err = git.GetCommits(ctx, gitDir, "")
+		if err != nil {
+			return fmt.Errorf("get commits failed: %w", err)
+		}
+		raw.Commits = nil // reset existing
+	}
+
+	if len(newCommits) > 0 {
+		// prepend new commits
+		raw.Commits = append(newCommits, raw.Commits...)
+	}
+
+	raw.Repo = repoID
 	raw.LastUpdated = time.Now().UTC()
+
 	if err := s.rawCache.Save(raw); err != nil {
 		return fmt.Errorf("save raw cache: %w", err)
 	}

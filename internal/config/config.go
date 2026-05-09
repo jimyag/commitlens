@@ -9,8 +9,17 @@ import (
 )
 
 type Repository struct {
-	Owner string `yaml:"owner"`
-	Repo  string `yaml:"repo"`
+	Owner     string `yaml:"owner"`
+	Repo      string `yaml:"repo"`
+	LocalPath string `yaml:"local_path"`
+}
+
+// ID returns a unique identifier for the repository.
+func (r Repository) ID() string {
+	if r.LocalPath != "" {
+		return filepath.Base(r.LocalPath)
+	}
+	return r.Owner + "/" + r.Repo
 }
 
 type GitHub struct {

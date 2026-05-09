@@ -7,16 +7,13 @@ import (
 	"strings"
 	"time"
 
-	gh "github.com/jimyag/commitlens/internal/github"
+	"github.com/jimyag/commitlens/internal/git"
 )
 
 type RawData struct {
-	Repo                string      `json:"repo"`
-	LastUpdated         time.Time   `json:"last_updated"`
-	InitialDirectSync   bool        `json:"initial_direct_sync"`
-	PRs                 []gh.PR     `json:"prs"`
-	DirectCommits       []gh.Commit `json:"direct_commits"`
-	DirectCommitsCursor string      `json:"direct_commits_cursor,omitempty"`
+	Repo        string       `json:"repo"`
+	LastUpdated time.Time    `json:"last_updated"`
+	Commits     []git.Commit `json:"commits"`
 }
 
 type RawCache struct {
@@ -38,7 +35,7 @@ func (c *RawCache) path(repo string) string {
 func (c *RawCache) Load(repo string) (*RawData, error) {
 	data, err := os.ReadFile(c.path(repo))
 	if os.IsNotExist(err) {
-		return &RawData{Repo: repo, LastUpdated: time.Time{}, PRs: nil}, nil
+		return &RawData{Repo: repo, LastUpdated: time.Time{}, Commits: nil}, nil
 	}
 	if err != nil {
 		return nil, err

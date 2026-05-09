@@ -3,14 +3,13 @@ import axios from 'axios'
 export interface ContributorStats {
   login: string
   avatar_url: string
-  pr_count: number
   commit_count: number
   additions: number
   deletions: number
 }
 
 export interface WeeklyEntry {
-  total_prs: number
+  total_commits: number
   contributors: Record<string, number>
 }
 
@@ -21,15 +20,13 @@ export interface StatsData {
   weekly: Record<string, WeeklyEntry>
 }
 
-export interface PRInfo {
+export interface CommitInfo {
   repo: string
-  number: number
-  sha?: string
+  sha: string
   title: string
   author: string
-  avatar_url: string
   participants: string[]
-  merged_at: string
+  date: string
   additions: number
   deletions: number
 }
@@ -42,6 +39,6 @@ export const api = {
       : axios.get<{ stats: StatsData[] }>('/api/stats'),
   sync: (repo?: string) =>
     axios.post('/api/sync', null, { params: repo ? { repo } : {} }),
-  getPRs: (params: { repo?: string; from?: string; to?: string; login?: string; page?: number; per_page?: number }) =>
-    axios.get<{ prs: PRInfo[]; total: number; page: number; per_page: number }>('/api/prs', { params }),
+  getCommits: (params: { repo?: string; from?: string; to?: string; login?: string; page?: number; per_page?: number }) =>
+    axios.get<{ commits: CommitInfo[]; total: number; page: number; per_page: number }>('/api/commits', { params }),
 }

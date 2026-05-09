@@ -15,43 +15,26 @@ func Aggregate(raw *cache.RawData) *cache.StatsData {
 		Weekly:       make(map[string]*cache.WeeklyEntry),
 	}
 
-	for _, pr := range raw.PRs {
-		participants := PRParticipants(&pr)
-		nc := len(pr.Commits)
-		// 主作者 + Co-authored-by 合著者；同 PR 内每人只计 1 次。PR/提交/增删行均计给每位参与者（协作 PR 的代码量在多人上可重复计）
+	for _, commit := range raw.Commits {
+		participants := commit.Participants
+		if len(participants) == 0 {
+			participants = []string{commit.Author}
+		}
+
 		for _, login := range participants {
-			avatar := ""
-			if login == pr.Author {
-				avatar = pr.AvatarURL
-			}
+			avatar := "" // We don't have avatar URLs from pure git log easily.
 			c := getOrCreate(result.Contributors, login, avatar)
-			c.PRCount++
-			c.CommitCount += nc
-			c.Additions += pr.Additions
-			c.Deletions += pr.Deletions
+			c.CommitCount++
+			c.Additions += commit.Additions
+			c.Deletions += commit.Deletions
 		}
-
-		week := WeekKey(pr.MergedAt)
-		w := getOrCreateWeek(result.Weekly, week)
-		w.TotalPRs++
-		for _, login := range participants {
-			w.Contributors[login]++
-		}
-	}
-
-	for _, commit := range raw.DirectCommits {
-		// 直接提交，作者仅有一人
-		login := commit.Author
-		c := getOrCreate(result.Contributors, login, "")
-		c.PRCount++ // 将 Direct Commit 计为一次有效的 Submission 从而和 PR 一同显示
-		c.CommitCount++
-		c.Additions += commit.Additions
-		c.Deletions += commit.Deletions
 
 		week := WeekKey(commit.Date)
 		w := getOrCreateWeek(result.Weekly, week)
-		w.TotalPRs++ // 将 Direct Commit 计入总 Submission 趋势
-		w.Contributors[login]++
+		w.TotalCommits++
+		for _, login := range participants {
+			w.Contributors[login]++
+		}
 	}
 
 	return result

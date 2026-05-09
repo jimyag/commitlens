@@ -47,7 +47,7 @@ export function Layout() {
   const lastSyncStr = lastSyncAt != null ? new Date(lastSyncAt).toLocaleTimeString(timeLocale) : ''
 
   const contributorList = Object.entries(allContributors)
-    .sort((a, b) => b[1].pr_count - a[1].pr_count)
+    .sort((a, b) => b[1].commit_count - a[1].commit_count)
     .map(([l]) => l)
 
   return (

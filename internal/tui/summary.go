@@ -24,7 +24,6 @@ func renderSummaryView(a *App) string {
 				continue
 			}
 			if existing, ok := merged[login]; ok {
-				existing.PRCount += c.PRCount
 				existing.CommitCount += c.CommitCount
 				existing.Additions += c.Additions
 				existing.Deletions += c.Deletions
@@ -45,7 +44,7 @@ func sortedContributors(m map[string]*cache.ContributorStats) []*cache.Contribut
 		list = append(list, v)
 	}
 	sort.Slice(list, func(i, j int) bool {
-		return list[i].PRCount > list[j].PRCount
+		return list[i].CommitCount > list[j].CommitCount
 	})
 	return list
 }
@@ -53,24 +52,22 @@ func sortedContributors(m map[string]*cache.ContributorStats) []*cache.Contribut
 func renderContributorTable(contributors []*cache.ContributorStats) string {
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
 	header := headerStyle.Render(
-		fmt.Sprintf("%-22s %6s %8s %9s %9s",
+		fmt.Sprintf("%-22s %8s %9s %9s",
 			locale.T("tui.table.contributor"),
-			locale.T("tui.table.pr"),
 			locale.T("tui.table.commits"),
 			locale.T("tui.table.added"),
 			locale.T("tui.table.deleted"),
 		),
 	)
-	sep := strings.Repeat("─", 56)
+	sep := strings.Repeat("─", 50)
 	rows := []string{header, sep}
 
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 
 	for _, c := range contributors {
-		row := fmt.Sprintf("%-20s %6d %8d %s %s",
+		row := fmt.Sprintf("%-20s %8d %s %s",
 			c.Login,
-			c.PRCount,
 			c.CommitCount,
 			addStyle.Render(fmt.Sprintf("%+9d", c.Additions)),
 			delStyle.Render(fmt.Sprintf("%+9d", -c.Deletions)),

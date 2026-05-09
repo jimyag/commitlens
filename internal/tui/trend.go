@@ -53,15 +53,15 @@ func renderTrendView(a *App) string {
 		chartTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + chartTitle)
 	}
 
-	totalValues := make([]float64, len(periods))
+	totalCommitsValues := make([]float64, len(periods))
 	for i, p := range periods {
-		totalValues[i] = float64(periodData[p].total)
+		totalCommitsValues[i] = float64(periodData[p].totalCommits)
 	}
 	selIdx := -1
 	if a.globalFocus == 3 {
 		selIdx = a.trendPeriodCursor
 	}
-	totalChart := renderBarChart(periods, totalValues, chartWidth, 12, false, selIdx, a.globalGranularity)
+	totalCommitsChart := renderBarChart(periods, totalCommitsValues, chartWidth, 12, false, selIdx, a.globalGranularity)
 
 	// 如果选中了具体贡献者，显示该贡献者的趋势
 	logins := a.availableGlobalLogins()
@@ -80,7 +80,7 @@ func renderTrendView(a *App) string {
 		personBlock = "\n" + fmt.Sprintf(locale.T("tui.trend.personTitle"), selectedLogin) + "\n" + pChart
 	}
 
-	block1 := chartTitle + "\n" + totalChart + personBlock
+	block1 := chartTitle + "\n" + totalCommitsChart + personBlock
 	max1 := trendHScrollMaxForBlock(block1, vpW)
 	maxOff := max1
 	if a.trendHScroll > maxOff {
@@ -412,7 +412,7 @@ func renderBarChart(periods []string, values []float64, width, height int, perso
 }
 
 type periodEntry struct {
-	total         int
+	totalCommits         int
 	byContributor map[string]int
 }
 
@@ -424,7 +424,7 @@ func aggregatePeriods(a *App) map[string]*periodEntry {
 			if _, ok := result[period]; !ok {
 				result[period] = &periodEntry{byContributor: make(map[string]int)}
 			}
-			result[period].total += w.TotalPRs
+			result[period].totalCommits += w.TotalCommits
 			for login, count := range w.Contributors {
 				result[period].byContributor[login] += count
 			}
@@ -471,12 +471,12 @@ func sortedPeriodKeys(m map[string]*periodEntry) []string {
 	return keys
 }
 
-// contributorsSortedByPRCount 按各登录在全仓库合并后的 PR 总数降序；同 PR 数时按登录名升序，顺序稳定。
-func contributorsSortedByPRCount(statsData []*cache.StatsData) []string {
+// contributorsSortedByCommitCount 按各登录在全仓库合并后的 PR 总数降序；同 PR 数时按登录名升序，顺序稳定。
+func contributorsSortedByCommitCount(statsData []*cache.StatsData) []string {
 	merged := make(map[string]int)
 	for _, s := range statsData {
 		for login, c := range s.Contributors {
-			merged[login] += c.PRCount
+			merged[login] += c.CommitCount
 		}
 	}
 	type row struct {

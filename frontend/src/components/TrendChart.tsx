@@ -165,7 +165,7 @@ function buildTrendOption(
   for (const [weekKey, entry] of Object.entries(weekly)) {
     const period = toPeriodKey(weekKey, granularity)
     if (!periodMap[period]) periodMap[period] = { total: 0, byLogin: {} }
-    periodMap[period].total += entry.total_prs
+    periodMap[period].total += entry.total_commits
     for (const [login, count] of Object.entries(entry.contributors)) {
       periodMap[period].byLogin[login] = (periodMap[period].byLogin[login] ?? 0) + count
     }

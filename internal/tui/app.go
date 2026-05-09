@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/config"
 	"github.com/jimyag/commitlens/internal/locale"
 	"github.com/jimyag/commitlens/internal/stats"
 	isync "github.com/jimyag/commitlens/internal/sync"
@@ -20,7 +22,7 @@ const (
 	viewSummary viewMode = iota
 	viewRepo
 	viewTrend
-	viewPRList
+	viewCommitList
 )
 
 type syncDoneMsg struct{ err error }
@@ -29,6 +31,7 @@ type App struct {
 	mode      viewMode
 	stats     []*cache.StatsData
 	repoNames []string
+	repos     []config.Repository
 	rawCache  *cache.RawCache
 	syncer    *isync.Syncer
 	syncing   bool
@@ -55,35 +58,39 @@ type App struct {
 	trendLastPeriodN  int // 用于周期数变化时重置横滚
 	trendPeriodCursor int // 趋势图中当前选中的周期索引
 
-	// PR 列表视图状态
-	prListFocus     int // 0=Period, 1=Table
-	prListPeriodIdx int // 0=All, 1...N
-	prListPRs       []prItem
-	prListCursor    int
+	// Commit List view state
+	commitListFocus     int // 0=Period, 1=Table
+	commitListPeriodIdx int // 0=All, 1...N
+	commitList          []commitItem
+	commitListCursor    int
 }
 
-type prItem struct {
+type commitItem struct {
 	Repo         string
-	Number       int
 	SHA          string
 	Title        string
 	Author       string
 	Participants []string
-	MergedAt     time.Time
+	Date         time.Time
 	Additions    int
 	Deletions    int
 }
 
-func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []string, rawCache *cache.RawCache) *App {
+func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache) *App {
+	repoNames := make([]string, len(repos))
+	for i, r := range repos {
+		repoNames[i] = r.ID()
+	}
 	return &App{
 		syncer:            syncer,
 		stats:             stats,
-		repoNames:         repos,
+		repoNames:         repoNames,
+		repos:             repos,
 		rawCache:          rawCache,
 		globalFocus:       0,
 		globalGranularity: 0,
 		globalLoginIdx:    0,
-		prListFocus:       0,
+		commitListFocus:   0,
 	}
 }
 
@@ -123,9 +130,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		case "tab":
 			if a.globalFocus == 3 {
-				if a.mode == viewPRList {
-					a.prListFocus = (a.prListFocus + 1) % 2
-					if a.prListFocus == 0 {
+				if a.mode == viewCommitList {
+					a.commitListFocus = (a.commitListFocus + 1) % 2
+					if a.commitListFocus == 0 {
 						a.globalFocus = 0
 					}
 				} else {
@@ -150,19 +157,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m := viewMode(s[0] - '1')
 			if m != a.mode {
 				a.mode = m
-				if a.mode == viewPRList {
-					a.refreshPRList()
+				if a.mode == viewCommitList {
+					a.refreshCommitList()
 				}
 			}
 		case "[":
 			a.mode = (a.mode + 3) % 4
-			if a.mode == viewPRList {
-				a.refreshPRList()
+			if a.mode == viewCommitList {
+				a.refreshCommitList()
 			}
 		case "]":
 			a.mode = (a.mode + 1) % 4
-			if a.mode == viewPRList {
-				a.refreshPRList()
+			if a.mode == viewCommitList {
+				a.refreshCommitList()
 			}
 		case "esc":
 			if a.globalRepoExpanded {
@@ -170,7 +177,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if a.globalLoginExpanded {
 				a.globalLoginExpanded = false
 				a.globalLoginSearch = ""
-			} else if a.mode == viewPRList {
+			} else if a.mode == viewCommitList {
 				a.mode = viewTrend
 			}
 		case "backspace", "delete":
@@ -181,7 +188,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else if a.globalRepoExpanded {
 				a.globalRepoExpanded = false
-			} else if a.mode == viewPRList {
+			} else if a.mode == viewCommitList {
 				a.mode = viewTrend
 			}
 		case "enter":
@@ -217,7 +224,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.globalLoginCursor = 0
 				}
 			} else if a.mode == viewTrend {
-				a.openPRListFromTrend()
+				a.openCommitListFromTrend()
 			}
 		case "space", " ":
 			if a.globalFocus == 0 {
@@ -256,9 +263,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if a.repoViewSelected > 0 {
 						a.repoViewSelected--
 					}
-				} else if a.mode == viewPRList {
-					if a.prListFocus == 1 && a.prListCursor > 0 {
-						a.prListCursor--
+				} else if a.mode == viewCommitList {
+					if a.commitListFocus == 1 && a.commitListCursor > 0 {
+						a.commitListCursor--
 					}
 				}
 			}
@@ -279,9 +286,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if a.repoViewSelected < len(a.repoNames)-1 {
 						a.repoViewSelected++
 					}
-				} else if a.mode == viewPRList {
-					if a.prListFocus == 1 && a.prListCursor < len(a.prListPRs)-1 {
-						a.prListCursor++
+				} else if a.mode == viewCommitList {
+					if a.commitListFocus == 1 && a.commitListCursor < len(a.commitList)-1 {
+						a.commitListCursor++
 					}
 				}
 			}
@@ -303,11 +310,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if a.trendPeriodCursor > 0 {
 						a.trendPeriodCursor--
 					}
-				} else if a.mode == viewPRList {
-					if a.prListFocus == 0 {
-						if a.prListPeriodIdx > 0 {
-							a.prListPeriodIdx--
-							a.refreshPRList()
+				} else if a.mode == viewCommitList {
+					if a.commitListFocus == 0 {
+						if a.commitListPeriodIdx > 0 {
+							a.commitListPeriodIdx--
+							a.refreshCommitList()
 						}
 					}
 				}
@@ -331,11 +338,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if a.trendPeriodCursor < maxP-1 {
 						a.trendPeriodCursor++
 					}
-				} else if a.mode == viewPRList {
-					if a.prListFocus == 0 {
-						if a.prListPeriodIdx < len(a.availablePRListPeriods())-1 {
-							a.prListPeriodIdx++
-							a.refreshPRList()
+				} else if a.mode == viewCommitList {
+					if a.commitListFocus == 0 {
+						if a.commitListPeriodIdx < len(a.availableCommitListPeriods())-1 {
+							a.commitListPeriodIdx++
+							a.refreshCommitList()
 						}
 					}
 				}
@@ -346,6 +353,284 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.err = msg.err
 	}
 	return a, nil
+}
+
+func (a *App) preserveLoginIdxDuring(changeFn func()) {
+	oldLogins := a.availableGlobalLogins()
+	var oldLogin string
+	if a.globalLoginIdx >= 0 && a.globalLoginIdx < len(oldLogins) {
+		oldLogin = oldLogins[a.globalLoginIdx]
+	}
+
+	changeFn()
+
+	newLogins := a.availableGlobalLogins()
+	newIdx := 0
+	if oldLogin != "" && oldLogin != locale.T("tui.prlist.filterAll") {
+		for i, l := range newLogins {
+			if l == oldLogin {
+				newIdx = i
+				break
+			}
+		}
+	}
+	a.globalLoginIdx = newIdx
+	a.onGlobalFilterChange()
+}
+
+func (a *App) toggleGlobalRepo(idx int) {
+	a.preserveLoginIdxDuring(func() {
+		if a.globalRepoMulti == nil {
+			a.globalRepoMulti = make(map[int]struct{})
+			for i := range a.repoNames {
+				a.globalRepoMulti[i] = struct{}{}
+			}
+		}
+		if _, ok := a.globalRepoMulti[idx]; ok {
+			if len(a.globalRepoMulti) > 1 {
+				delete(a.globalRepoMulti, idx)
+			}
+		} else {
+			a.globalRepoMulti[idx] = struct{}{}
+		}
+	})
+}
+
+func (a *App) onGlobalFilterChange() {
+	if a.mode == viewCommitList {
+		a.refreshCommitList()
+	}
+}
+
+func (a *App) availableGlobalLogins() []string {
+	logins := contributorsSortedByCommitCount(trendFilteredStats(a))
+	out := []string{locale.T("tui.prlist.filterAll")}
+	out = append(out, logins...)
+	return out
+}
+
+func (a *App) filteredLogins() []string {
+	all := a.availableGlobalLogins()
+	if a.globalLoginSearch == "" {
+		return all
+	}
+	search := strings.ToLower(a.globalLoginSearch)
+	var out []string
+	for _, l := range all {
+		if strings.Contains(strings.ToLower(l), search) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+func (a *App) availableCommitListPeriods() []string {
+	periods := sortedPeriodKeys(aggregatePeriods(a))
+	out := []string{locale.T("tui.prlist.filterAll")}
+	out = append(out, periods...)
+	return out
+}
+
+func (a *App) openCommitListFromTrend() {
+	periods := sortedPeriodKeys(aggregatePeriods(a))
+	if len(periods) == 0 || a.trendPeriodCursor >= len(periods) {
+		return
+	}
+	period := periods[a.trendPeriodCursor]
+
+	a.mode = viewCommitList
+	a.globalFocus = 3
+	a.commitListFocus = 1 // Focus on table
+
+	// Find indices for the selected period
+	a.commitListPeriodIdx = 0
+	for i, p := range a.availableCommitListPeriods() {
+		if p == period {
+			a.commitListPeriodIdx = i
+			break
+		}
+	}
+	a.refreshCommitList()
+}
+
+func (a *App) refreshCommitList() {
+	periods := a.availableCommitListPeriods()
+
+	var period string
+	if a.commitListPeriodIdx > 0 && a.commitListPeriodIdx < len(periods) {
+		period = periods[a.commitListPeriodIdx]
+	}
+
+	logins := a.availableGlobalLogins()
+	var login string
+	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
+		login = logins[a.globalLoginIdx]
+	}
+
+	a.commitList = a.fetchCommits(period, login)
+	a.commitListCursor = 0
+}
+
+func (a *App) fetchCommits(period, login string) []commitItem {
+	var out []commitItem
+	stats_ := trendFilteredStats(a)
+	for _, s := range stats_ {
+		raw, err := a.rawCache.Load(s.Repo)
+		if err != nil {
+			continue
+		}
+		for _, commit := range raw.Commits {
+			if period != "" {
+				if toPeriodKey(stats.WeekKey(commit.Date), a.globalGranularity) != period {
+					continue
+				}
+			}
+			if login != "" {
+				found := false
+				participants := commit.Participants
+				if len(participants) == 0 {
+					participants = []string{commit.Author}
+				}
+				for _, p := range participants {
+					if p == login {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			}
+			
+			participants := commit.Participants
+			if len(participants) == 0 {
+				participants = []string{commit.Author}
+			}
+			
+			out = append(out, commitItem{
+				Repo:         s.Repo,
+				SHA:          commit.SHA,
+				Title:        commit.Message,
+				Author:       commit.Author,
+				Participants: participants,
+				Date:         commit.Date,
+				Additions:    commit.Additions,
+				Deletions:    commit.Deletions,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Date.After(out[j].Date)
+	})
+	return out
+}
+
+func (a *App) doSync() tea.Cmd {
+	return func() tea.Msg {
+		a.syncer.SyncAll(context.Background(), a.repos, nil, 5)
+		return syncDoneMsg{err: nil}
+	}
+}
+
+func (a *App) nRepos() int { return len(a.repoNames) }
+
+const trendHScrollStep = 8
+
+// trendHScrollKey 处理趋势内横向滚动，true 表示已消费该键（不再走粒度等逻辑）。
+func (a *App) trendHScrollKey(msg tea.KeyPressMsg) bool {
+	k := msg.Key()
+	if k.Code == tea.KeyLeft && (k.Mod&tea.ModShift) != 0 {
+		a.trendHScroll -= trendHScrollStep
+		if a.trendHScroll < 0 {
+			a.trendHScroll = 0
+		}
+		return true
+	}
+	if k.Code == tea.KeyRight && (k.Mod&tea.ModShift) != 0 {
+		a.trendHScroll += trendHScrollStep
+		return true
+	}
+	if k.Code == tea.KeyHome {
+		a.trendHScroll = 0
+		return true
+	}
+	if k.Code == tea.KeyEnd {
+		a.trendHScroll = 1e9
+		return true
+	}
+	s := msg.String()
+	if s == "<" {
+		a.trendHScroll -= trendHScrollStep
+		if a.trendHScroll < 0 {
+			a.trendHScroll = 0
+		}
+		return true
+	}
+	if s == ">" {
+		a.trendHScroll += trendHScrollStep
+		return true
+	}
+	return false
+}
+
+func (a *App) View() tea.View {
+	header := a.renderHeader()
+	filters := a.renderGlobalFilters()
+	var body string
+	switch a.mode {
+	case viewSummary:
+		body = a.renderSummary()
+	case viewRepo:
+		body = a.renderRepo()
+	case viewTrend:
+		body = a.renderTrend()
+	case viewCommitList:
+		body = a.renderCommitList()
+	}
+	status := a.renderStatus()
+	v := tea.NewView(fmt.Sprintf("%s\n%s\n\n%s\n%s", header, filters, body, status))
+	v.AltScreen = true
+	return v
+}
+
+func (a *App) renderHeader() string {
+	tabs := []string{
+		locale.T("tui.tab.summary"),
+		locale.T("tui.tab.repos"),
+		locale.T("tui.tab.trend"),
+		locale.T("tui.tab.prlist"),
+	}
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	line := ""
+	for i, t := range tabs {
+		if viewMode(i) == a.mode {
+			line += style.Render(t) + " "
+		} else {
+			line += t + " "
+		}
+	}
+	return "CommitLens  " + line + locale.T("tui.header.hints")
+}
+
+func (a *App) renderStatus() string {
+	if a.syncing {
+		return locale.T("tui.status.syncing")
+	}
+	if a.err != nil {
+		return fmt.Sprintf(locale.T("tui.status.error"), a.err)
+	}
+	return ""
+}
+
+func (a *App) renderSummary() string { return renderSummaryView(a) }
+func (a *App) renderRepo() string    { return renderRepoView(a) }
+func (a *App) renderTrend() string   { return renderTrendView(a) }
+
+func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache) error {
+	app := New(syncer, stats, repos, rawCache)
+	p := tea.NewProgram(app)
+	_, err := p.Run()
+	return err
 }
 
 var (
@@ -463,292 +748,4 @@ func trendFilteredStats(a *App) []*cache.StatsData {
 		return a.stats
 	}
 	return out
-}
-
-func (a *App) preserveLoginIdxDuring(changeFn func()) {
-	oldLogins := a.availableGlobalLogins()
-	var oldLogin string
-	if a.globalLoginIdx >= 0 && a.globalLoginIdx < len(oldLogins) {
-		oldLogin = oldLogins[a.globalLoginIdx]
-	}
-
-	changeFn()
-
-	newLogins := a.availableGlobalLogins()
-	newIdx := 0
-	if oldLogin != "" && oldLogin != locale.T("tui.prlist.filterAll") {
-		for i, l := range newLogins {
-			if l == oldLogin {
-				newIdx = i
-				break
-			}
-		}
-	}
-	a.globalLoginIdx = newIdx
-	a.onGlobalFilterChange()
-}
-
-func (a *App) toggleGlobalRepo(idx int) {
-	a.preserveLoginIdxDuring(func() {
-		if a.globalRepoMulti == nil {
-			a.globalRepoMulti = make(map[int]struct{})
-			for i := range a.repoNames {
-				a.globalRepoMulti[i] = struct{}{}
-			}
-		}
-		if _, ok := a.globalRepoMulti[idx]; ok {
-			if len(a.globalRepoMulti) > 1 {
-				delete(a.globalRepoMulti, idx)
-			}
-		} else {
-			a.globalRepoMulti[idx] = struct{}{}
-		}
-	})
-}
-
-func (a *App) onGlobalFilterChange() {
-	if a.mode == viewPRList {
-		a.refreshPRList()
-	}
-}
-
-func (a *App) availableGlobalLogins() []string {
-	logins := contributorsSortedByPRCount(trendFilteredStats(a))
-	out := []string{locale.T("tui.prlist.filterAll")}
-	out = append(out, logins...)
-	return out
-}
-
-func (a *App) filteredLogins() []string {
-	all := a.availableGlobalLogins()
-	if a.globalLoginSearch == "" {
-		return all
-	}
-	search := strings.ToLower(a.globalLoginSearch)
-	var out []string
-	for _, l := range all {
-		if strings.Contains(strings.ToLower(l), search) {
-			out = append(out, l)
-		}
-	}
-	return out
-}
-
-func (a *App) availablePRListPeriods() []string {
-	periods := sortedPeriodKeys(aggregatePeriods(a))
-	out := []string{locale.T("tui.prlist.filterAll")}
-	out = append(out, periods...)
-	return out
-}
-
-func (a *App) openPRListFromTrend() {
-	periods := sortedPeriodKeys(aggregatePeriods(a))
-	if len(periods) == 0 || a.trendPeriodCursor >= len(periods) {
-		return
-	}
-	period := periods[a.trendPeriodCursor]
-
-	a.mode = viewPRList
-	a.globalFocus = 3
-	a.prListFocus = 1 // Focus on table
-
-	// Find indices for the selected period
-	a.prListPeriodIdx = 0
-	for i, p := range a.availablePRListPeriods() {
-		if p == period {
-			a.prListPeriodIdx = i
-			break
-		}
-	}
-	a.refreshPRList()
-}
-
-func (a *App) refreshPRList() {
-	periods := a.availablePRListPeriods()
-
-	var period string
-	if a.prListPeriodIdx > 0 && a.prListPeriodIdx < len(periods) {
-		period = periods[a.prListPeriodIdx]
-	}
-
-	logins := a.availableGlobalLogins()
-	var login string
-	if a.globalLoginIdx > 0 && a.globalLoginIdx < len(logins) {
-		login = logins[a.globalLoginIdx]
-	}
-
-	a.prListPRs = a.fetchPRs(period, login)
-	a.prListCursor = 0
-}
-
-func (a *App) fetchPRs(period, login string) []prItem {
-	var out []prItem
-	stats_ := trendFilteredStats(a)
-	for _, s := range stats_ {
-		raw, err := a.rawCache.Load(s.Repo)
-		if err != nil {
-			continue
-		}
-		for _, pr := range raw.PRs {
-			if period != "" {
-				if toPeriodKey(stats.WeekKey(pr.MergedAt), a.globalGranularity) != period {
-					continue
-				}
-			}
-			if login != "" {
-				found := false
-				for _, p := range stats.PRParticipants(&pr) {
-					if p == login {
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue
-				}
-			}
-			out = append(out, prItem{
-				Repo:         s.Repo,
-				Number:       pr.Number,
-				Title:        pr.Title,
-				Author:       pr.Author,
-				Participants: stats.PRParticipants(&pr),
-				MergedAt:     pr.MergedAt,
-				Additions:    pr.Additions,
-				Deletions:    pr.Deletions,
-			})
-		}
-		for _, commit := range raw.DirectCommits {
-			if period != "" {
-				if toPeriodKey(stats.WeekKey(commit.Date), a.globalGranularity) != period {
-					continue
-				}
-			}
-			if login != "" && login != commit.Author {
-				continue
-			}
-			out = append(out, prItem{
-				Repo:         s.Repo,
-				Number:       0,
-				SHA:          commit.SHA,
-				Title:        commit.Message,
-				Author:       commit.Author,
-				Participants: []string{commit.Author},
-				MergedAt:     commit.Date,
-				Additions:    commit.Additions,
-				Deletions:    commit.Deletions,
-			})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].MergedAt.After(out[j].MergedAt)
-	})
-	return out
-}
-
-func (a *App) doSync() tea.Cmd {
-	return func() tea.Msg {
-		return syncDoneMsg{err: nil}
-	}
-}
-
-func (a *App) nRepos() int { return len(a.repoNames) }
-
-const trendHScrollStep = 8
-
-// trendHScrollKey 处理趋势内横向滚动，true 表示已消费该键（不再走粒度等逻辑）。
-func (a *App) trendHScrollKey(msg tea.KeyPressMsg) bool {
-	k := msg.Key()
-	if k.Code == tea.KeyLeft && (k.Mod&tea.ModShift) != 0 {
-		a.trendHScroll -= trendHScrollStep
-		if a.trendHScroll < 0 {
-			a.trendHScroll = 0
-		}
-		return true
-	}
-	if k.Code == tea.KeyRight && (k.Mod&tea.ModShift) != 0 {
-		a.trendHScroll += trendHScrollStep
-		return true
-	}
-	if k.Code == tea.KeyHome {
-		a.trendHScroll = 0
-		return true
-	}
-	if k.Code == tea.KeyEnd {
-		a.trendHScroll = 1e9
-		return true
-	}
-	s := msg.String()
-	if s == "<" {
-		a.trendHScroll -= trendHScrollStep
-		if a.trendHScroll < 0 {
-			a.trendHScroll = 0
-		}
-		return true
-	}
-	if s == ">" {
-		a.trendHScroll += trendHScrollStep
-		return true
-	}
-	return false
-}
-
-func (a *App) View() tea.View {
-	header := a.renderHeader()
-	filters := a.renderGlobalFilters()
-	var body string
-	switch a.mode {
-	case viewSummary:
-		body = a.renderSummary()
-	case viewRepo:
-		body = a.renderRepo()
-	case viewTrend:
-		body = a.renderTrend()
-	case viewPRList:
-		body = a.renderPRList()
-	}
-	status := a.renderStatus()
-	v := tea.NewView(fmt.Sprintf("%s\n%s\n\n%s\n%s", header, filters, body, status))
-	v.AltScreen = true
-	return v
-}
-
-func (a *App) renderHeader() string {
-	tabs := []string{
-		locale.T("tui.tab.summary"),
-		locale.T("tui.tab.repos"),
-		locale.T("tui.tab.trend"),
-		locale.T("tui.tab.prlist"),
-	}
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	line := ""
-	for i, t := range tabs {
-		if viewMode(i) == a.mode {
-			line += style.Render(t) + " "
-		} else {
-			line += t + " "
-		}
-	}
-	return "CommitLens  " + line + locale.T("tui.header.hints")
-}
-
-func (a *App) renderStatus() string {
-	if a.syncing {
-		return locale.T("tui.status.syncing")
-	}
-	if a.err != nil {
-		return fmt.Sprintf(locale.T("tui.status.error"), a.err)
-	}
-	return ""
-}
-
-func (a *App) renderSummary() string { return renderSummaryView(a) }
-func (a *App) renderRepo() string    { return renderRepoView(a) }
-func (a *App) renderTrend() string   { return renderTrendView(a) }
-
-func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []string, rawCache *cache.RawCache) error {
-	app := New(syncer, stats, repos, rawCache)
-	p := tea.NewProgram(app)
-	_, err := p.Run()
-	return err
 }

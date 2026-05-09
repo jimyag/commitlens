@@ -10,7 +10,6 @@ import (
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
 	"github.com/jimyag/commitlens/internal/locale"
-	gh "github.com/jimyag/commitlens/internal/github"
 	isync "github.com/jimyag/commitlens/internal/sync"
 	"github.com/jimyag/commitlens/internal/tui"
 	"github.com/jimyag/commitlens/internal/web"
@@ -25,8 +24,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "commitlens",
-	Short: "GitHub contribution stats viewer",
-	Long:  "CommitLens shows per-contributor merged PR, commit, and line-change stats for GitHub repositories.",
+	Short: "Universal Git Code Contribution Analyzer",
+	Long:  "CommitLens shows per-contributor commit and line-change stats for any local or remote Git repository.",
 	RunE:  run,
 }
 
@@ -54,7 +53,7 @@ func run(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "config file not found: %s\n\ncreate a config file, for example:\n\nrepositories:\n  - owner: your-org\n    repo: your-repo\n", cfgPath)
+			fmt.Fprintf(os.Stderr, "config file not found: %s\n\ncreate a config file, for example:\n\nrepositories:\n  - local_path: /path/to/my/repo\n  - owner: your-org\n    repo: your-repo\n", cfgPath)
 			os.Exit(1)
 		}
 		return err
@@ -65,26 +64,37 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	locale.Init(cfg.Language)
 
-	client := gh.NewClient(cfg.GitHub.Token)
 	rawCache := cache.NewRawCache(cfg.Cache.Dir)
 	statsCache := cache.NewStatsCache(cfg.Cache.Dir)
-	syncer := isync.New(client, rawCache, statsCache)
+	syncer := isync.New(cfg, rawCache, statsCache)
 
-	repos := make([]string, len(cfg.Repositories))
-	for i, r := range cfg.Repositories {
-		repos[i] = r.Owner + "/" + r.Repo
+	repos := cfg.Repositories
+	var repoNames []string
+	for _, r := range repos {
+		repoNames = append(repoNames, r.ID())
 	}
 
-	runSync(cmd.Context(), syncer, repos)
-
 	var allStats []*cache.StatsData
-	for _, repo := range repos {
-		s, err := statsCache.Load(repo)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not load stats for %s: %v\n", repo, err)
-			continue
+	hasCache := false
+	for _, repoName := range repoNames {
+		s, err := statsCache.Load(repoName)
+		if err == nil && len(s.Contributors) > 0 {
+			allStats = append(allStats, s)
+			hasCache = true
+		} else {
+			allStats = append(allStats, &cache.StatsData{Repo: repoName})
 		}
-		allStats = append(allStats, s)
+	}
+
+	// Only run blocking sync UI if we have no cached data at all.
+	if !hasCache {
+		runSync(cmd.Context(), syncer, repos)
+		// Reload stats after sync
+		allStats = nil
+		for _, repoName := range repoNames {
+			s, _ := statsCache.Load(repoName)
+			allStats = append(allStats, s)
+		}
 	}
 
 	if webMode {
@@ -94,7 +104,7 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		addr := fmt.Sprintf(":%d", port)
 		fmt.Printf("CommitLens web UI: http://localhost%s\n", addr)
-		srv := web.New(globalAssets, syncer, allStats, repos, rawCache)
+		srv := web.New(globalAssets, syncer, allStats, repoNames, rawCache)
 		return srv.Run(addr)
 	}
 
@@ -102,15 +112,20 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 // runSync launches a bubbletea progress UI while syncing all repos concurrently.
-func runSync(ctx context.Context, syncer *isync.Syncer, repos []string) {
-	// Large buffer so sync never blocks on progress while TUI is drawing (multi‑repo × large PR counts).
+func runSync(ctx context.Context, syncer *isync.Syncer, repos []config.Repository) {
+	// Large buffer so sync never blocks on progress while TUI is drawing.
 	progress := make(chan isync.Progress, 65536)
 
 	go func() {
 		syncer.SyncAll(ctx, repos, progress, 5)
 	}()
 
-	if err := tui.RunSyncProgress(repos, progress); err != nil {
+	var repoNames []string
+	for _, r := range repos {
+		repoNames = append(repoNames, r.ID())
+	}
+
+	if err := tui.RunSyncProgress(repoNames, progress); err != nil {
 		// Drain remaining events so SyncAll can finish
 		for range progress {
 		}

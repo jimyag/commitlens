@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import type { PRInfo } from '../api'
+import type { CommitInfo } from '../api'
 import { api } from '../api'
 import { toPeriodKey, periodToDateRange, type Granularity } from '../utils/periodUtils'
 import { useI18n } from '../i18n/I18nContext'
@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext'
 
 const PER_PAGE = 100
 
-function formatMergedAt(iso: string): string {
+function formatDate(iso: string): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -43,7 +43,7 @@ export function PRListPage() {
   const repo = searchParams.get('repo') ?? ''
   const selectedLogin = searchParams.get('login') ?? ''
 
-  const [prs, setPRs] = useState<PRInfo[]>([])
+  const [commits, setCommits] = useState<CommitInfo[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -60,7 +60,7 @@ export function PRListPage() {
       }
     }
     setLoading(true)
-    const params: Parameters<typeof api.getPRs>[0] = {
+    const params: Parameters<typeof api.getCommits>[0] = {
       repo: repo || undefined,
       login: selectedLogin || undefined,
       page,
@@ -71,9 +71,9 @@ export function PRListPage() {
       params.from = range.from
       params.to = range.to
     }
-    api.getPRs(params)
+    api.getCommits(params)
       .then(res => {
-        setPRs(res.data.prs ?? [])
+        setCommits(res.data.commits ?? [])
         setTotal(res.data.total ?? 0)
       })
       .finally(() => setLoading(false))
@@ -108,7 +108,7 @@ export function PRListPage() {
     return Array.from(loginSet).sort()
   }, [allStats, repo, gran, period])
 
-  const multiRepo = useMemo(() => new Set(prs.map(pr => pr.repo)).size > 1, [prs])
+  const multiRepo = useMemo(() => new Set(commits.map(c => c.repo)).size > 1, [commits])
   const totalPages = Math.ceil(total / PER_PAGE)
 
   const patch = (key: string, value: string) => {
@@ -126,8 +126,8 @@ export function PRListPage() {
     navigate('/?' + next.toString())
   }
 
-  const getAvatarUrl = (login: string, pr: PRInfo) =>
-    login === pr.author ? pr.avatar_url : allContributors[login]?.avatar_url
+  const getAvatarUrl = (login: string, _c: CommitInfo) =>
+    allContributors[login]?.avatar_url
 
   return (
     <div style={{ padding: '20px 5% 40px' }}>
@@ -180,13 +180,13 @@ export function PRListPage() {
         </div>
       </div>
 
-      {/* PR 表格 */}
+      {/* Commit 表格 */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
         {loading ? (
           <div style={{ padding: '40px 24px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
             {t('prPage.loading')}
           </div>
-        ) : prs.length === 0 ? (
+        ) : commits.length === 0 ? (
           <div style={{ padding: '40px 24px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
             {t('prPage.empty')}
           </div>
@@ -202,23 +202,18 @@ export function PRListPage() {
               </tr>
             </thead>
             <tbody>
-              {prs.map((pr, idx) => {
-                const participants = pr.participants?.length ? pr.participants : [pr.author]
-                const isDirect = pr.number === 0
-                const linkUrl = isDirect 
-                  ? `https://github.com/${pr.repo}/commit/${pr.sha}`
-                  : `https://github.com/${pr.repo}/pull/${pr.number}`
-                const linkText = isDirect
-                  ? `[${pr.sha?.substring(0, 7)}]`
-                  : `#${pr.number}`
+              {commits.map((c, idx) => {
+                const participants = c.participants?.length ? c.participants : [c.author]
+                const linkUrl = `https://github.com/${c.repo}/commit/${c.sha}`
+                const linkText = `[${c.sha.substring(0, 7)}]`
                 
                 return (
-                  <tr key={`${pr.repo}-${isDirect ? pr.sha : pr.number}`} style={{
-                    borderBottom: idx < prs.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  <tr key={`${c.repo}-${c.sha}`} style={{
+                    borderBottom: idx < commits.length - 1 ? '1px solid #f3f4f6' : 'none',
                     background: idx % 2 === 0 ? '#fff' : '#fafafa',
                   }}>
                     {multiRepo && (
-                      <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>{pr.repo}</td>
+                      <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>{c.repo}</td>
                     )}
                     <td style={{ ...tdStyle, minWidth: 240 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -231,26 +226,26 @@ export function PRListPage() {
                         >
                           {linkText}
                         </a>
-                        <span style={{ color: '#111827', lineHeight: 1.5 }}>{pr.title}</span>
+                        <span style={{ color: '#111827', lineHeight: 1.5 }}>{c.title}</span>
                       </div>
                     </td>
                     <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {participants.map(login => (
                           <div key={login} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Avatar login={login} avatarUrl={getAvatarUrl(login, pr)} />
+                            <Avatar login={login} avatarUrl={getAvatarUrl(login, c)} />
                             <span style={{ color: '#374151' }}>{login}</span>
                           </div>
                         ))}
                       </div>
                     </td>
                     <td style={{ ...tdStyle, color: '#6b7280', whiteSpace: 'nowrap' }}>
-                      {formatMergedAt(pr.merged_at)}
+                      {formatDate(c.date)}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <span style={{ color: '#16a34a' }}>+{pr.additions}</span>
+                      <span style={{ color: '#16a34a' }}>+{c.additions}</span>
                       {' '}
-                      <span style={{ color: '#dc2626' }}>-{pr.deletions}</span>
+                      <span style={{ color: '#dc2626' }}>-{c.deletions}</span>
                     </td>
                   </tr>
                 )
