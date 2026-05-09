@@ -28,6 +28,43 @@ func repoKey(repo string) string {
 	return strings.ReplaceAll(repo, "/", "_")
 }
 
+func (c *RawCache) Dir() string { return c.dir }
+
+type SyncStatus struct {
+	Repo        string    `json:"repo"`
+	LastLog     string    `json:"last_log"`
+	LastUpdated time.Time `json:"last_updated"`
+	Syncing     bool      `json:"syncing"`
+	PID         int       `json:"pid"`
+}
+
+func (c *RawCache) statusPath(repo string) string {
+	return filepath.Join(c.dir, repoKey(repo)+"_status.json")
+}
+
+func (c *RawCache) LoadStatus(repo string) (*SyncStatus, error) {
+	data, err := os.ReadFile(c.statusPath(repo))
+	if os.IsNotExist(err) {
+		return &SyncStatus{Repo: repo}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var st SyncStatus
+	return &st, json.Unmarshal(data, &st)
+}
+
+func (c *RawCache) SaveStatus(st *SyncStatus) error {
+	if err := os.MkdirAll(c.dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(c.statusPath(st.Repo), data, 0644)
+}
+
 func (c *RawCache) path(repo string) string {
 	return filepath.Join(c.dir, repoKey(repo)+"_raw.json")
 }

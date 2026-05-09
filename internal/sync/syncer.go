@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -104,6 +105,45 @@ func (s *Syncer) SyncRepo(ctx context.Context, repo config.Repository) error {
 func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgress func(FetchProgress)) error {
 	repoID := repo.ID()
 	
+	// Check locking
+	status, err := s.rawCache.LoadStatus(repoID)
+	if err == nil && status.Syncing {
+		// Verify if the process is actually still alive
+		if status.PID > 0 {
+			if p, err := os.FindProcess(status.PID); err == nil {
+				// On Unix, FindProcess always succeeds. We need to check if signal 0 works.
+				if err := p.Signal(os.Signal(nil)); err == nil {
+					return fmt.Errorf("repository is already being synced by PID %d", status.PID)
+				}
+			}
+		}
+	}
+
+	// Set lock
+	status = &cache.SyncStatus{
+		Repo:        repoID,
+		Syncing:     true,
+		PID:         os.Getpid(),
+		LastUpdated: time.Now().UTC(),
+	}
+	_ = s.rawCache.SaveStatus(status)
+
+	// Ensure lock is released on exit
+	defer func() {
+		status.Syncing = false
+		status.LastUpdated = time.Now().UTC()
+		_ = s.rawCache.SaveStatus(status)
+	}()
+
+	updateStatus := func(log string) {
+		status.LastLog = log
+		status.LastUpdated = time.Now().UTC()
+		_ = s.rawCache.SaveStatus(status)
+		if onProgress != nil {
+			onProgress(FetchProgress{Log: log})
+		}
+	}
+
 	raw, err := s.rawCache.Load(repoID)
 	if err != nil {
 		return fmt.Errorf("load raw cache: %w", err)
@@ -115,13 +155,11 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 		skipFetch = true
 	}
 
-	if onProgress != nil {
-		log := "ensuring local repository..."
-		if skipFetch {
-			log = "using local repository (recent cache)..."
-		}
-		onProgress(FetchProgress{Log: log})
+	logMsg := "ensuring local repository..."
+	if skipFetch {
+		logMsg = "using local repository (recent cache)..."
 	}
+	updateStatus(logMsg)
 	
 	gitDir, err := git.EnsureRepo(ctx, repo, s.cfg.GitHub.Token, s.cfg.Cache.Dir, skipFetch)
 	if err != nil {
@@ -130,41 +168,40 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 
 	revRange := ""
 	if len(raw.Commits) > 0 {
-		// Incremental: get commits from latest_sha..HEAD
-		// raw.Commits is newest to oldest, so the first one is the latest.
 		latestSHA := raw.Commits[0].SHA
 		revRange = fmt.Sprintf("%s..HEAD", latestSHA)
 	}
 
-	if onProgress != nil {
-		onProgress(FetchProgress{Log: "extracting commits..."})
-	}
+	updateStatus("extracting commits...")
 
 	newCommits, err := git.GetCommits(ctx, gitDir, revRange)
 	if err != nil {
-		// If revRange failed (e.g. latestSHA no longer in repo), fallback to full scan
+		// Fallback
 		newCommits, err = git.GetCommits(ctx, gitDir, "")
 		if err != nil {
 			return fmt.Errorf("get commits failed: %w", err)
 		}
-		raw.Commits = nil // reset existing
+		raw.Commits = nil
 	}
 
 	if len(newCommits) > 0 {
-		// prepend new commits
 		raw.Commits = append(newCommits, raw.Commits...)
 	}
 
 	raw.Repo = repoID
 	raw.LastUpdated = time.Now().UTC()
 
+	updateStatus(fmt.Sprintf("saving %d commits...", len(raw.Commits)))
 	if err := s.rawCache.Save(raw); err != nil {
 		return fmt.Errorf("save raw cache: %w", err)
 	}
 
+	updateStatus("aggregating statistics...")
 	computed := stats.Aggregate(raw, s.cfg)
 	if err := s.statsCache.Save(computed); err != nil {
 		return fmt.Errorf("save stats cache: %w", err)
 	}
+
+	updateStatus("done")
 	return nil
 }
