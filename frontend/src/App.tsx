@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useApp, mergeContributors, mergeWeekly } from './context/AppContext'
+import { useApp } from './context/AppContext'
+import { mergeContributors, mergeWeekly } from './utils/statsUtils'
+import type { ContributorStats } from './api'
 import { ContributorTable } from './components/ContributorTable'
 import { TrendChart } from './components/TrendChart'
 import type { Granularity } from './components/TrendChart'
@@ -41,7 +43,7 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
     const merged = mergeContributors(filteredStats)
     if (selectedLogins.length === 0) return merged
     
-    const filtered: Record<string, any> = {}
+    const filtered: Record<string, ContributorStats> = {}
     selectedLogins.forEach(l => {
       if (merged[l]) filtered[l] = merged[l]
     })

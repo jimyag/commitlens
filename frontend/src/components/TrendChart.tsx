@@ -379,11 +379,12 @@ function buildTrendOption(
       backgroundColor: 'rgba(17, 24, 39, 0.92)',
       borderWidth: 0,
       textStyle: { color: '#f9fafb', fontSize: 12 },
-      formatter(params: any) {
-        if (!params || params.length === 0) return ''
-        const period = params[0].name
+      formatter(params: unknown) {
+        const pList = params as { name: string; seriesName: string; value: number }[]
+        if (!pList || pList.length === 0) return ''
+        const period = pList[0].name
         let res = `<div style="font-weight:600;margin-bottom:6px">${period}</div>`
-        params.forEach((p: any) => {
+        pList.forEach((p) => {
           if (p.value === 0) return
           const val = Math.abs(p.value)
           res += `<div>${p.seriesName}: <span style="font-weight:600">${val}</span></div>`

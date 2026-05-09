@@ -2,6 +2,8 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { Outlet, Link, NavLink, useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useI18n, type Lang } from '../i18n/I18nContext'
+import type { MessageKey } from '../i18n/bundles/en'
+import type { ContributorStats } from '../api'
 import type { Granularity } from './TrendChart'
 
 function navLinkStyle(isActive: boolean): React.CSSProperties {
@@ -13,23 +15,13 @@ function navLinkStyle(isActive: boolean): React.CSSProperties {
     color: isActive ? '#4f46e5' : '#6b7280',
     background: isActive ? '#eef2ff' : 'transparent',
     textDecoration: 'none',
-    display: 'inline-block',
+    transition: 'all 0.2s',
   }
 }
 
-const selectStyle: React.CSSProperties = {
-  padding: '5px 10px',
-  borderRadius: 6,
-  border: '1px solid #d1d5db',
-  fontSize: 13,
-  background: '#fff',
-  color: '#374151',
-  cursor: 'pointer',
-}
-
 export function Layout() {
-  const { repos: allRepoNames, allStats, allContributors, syncing, lastSyncAt, syncRepo } = useApp()
-  const { t, tf, lang, setLang } = useI18n()
+  const { repos: allRepoIDs, allStats, allContributors, syncing, syncRepo } = useApp()
+  const { lang, setLang, t, tf } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const selectedRepos = useMemo(() => {
@@ -37,91 +29,82 @@ export function Layout() {
     return val ? val.split(',').filter(Boolean) : []
   }, [searchParams])
 
-  const gran = (searchParams.get('gran') ?? 'week') as Granularity
-
   const selectedLogins = useMemo(() => {
     const val = searchParams.get('login')
     return val ? val.split(',').filter(Boolean) : []
   }, [searchParams])
 
-  // Dropdown States
-  const [showRepoDropdown, setShowRepoDropdown] = useState(false)
+  const gran = (searchParams.get('gran') ?? 'week') as Granularity
+
+  const [repoOpen, setRepoOpen] = useState(false)
+  const [userOpen, setUserOpen] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
-  const [showLoginDropdown, setShowLoginDropdown] = useState(false)
-  const [loginSearch, setLoginSearch] = useState('')
-  
-  const repoDropdownRef = useRef<HTMLDivElement>(null)
-  const loginDropdownRef = useRef<HTMLDivElement>(null)
+  const [userSearch, setUserSearch] = useState('')
+
+  const repoRef = useRef<HTMLDivElement>(null)
+  const userRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (repoDropdownRef.current && !repoDropdownRef.current.contains(event.target as Node)) {
-        setShowRepoDropdown(false)
-      }
-      if (loginDropdownRef.current && !loginDropdownRef.current.contains(event.target as Node)) {
-        setShowLoginDropdown(false)
-      }
+    const clickOutside = (e: MouseEvent) => {
+      if (repoRef.current && !repoRef.current.contains(e.target as Node)) setRepoOpen(false)
+      if (userRef.current && !userRef.current.contains(e.target as Node)) setUserOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', clickOutside)
+    return () => document.removeEventListener('mousedown', clickOutside)
   }, [])
 
-  const toggleItem = (key: string, currentValues: string[], value: string) => {
-    let nextValues: string[]
-    if (value === '') {
-      nextValues = [] // Clear all
-    } else if (currentValues.includes(value)) {
-      nextValues = currentValues.filter(v => v !== value)
-    } else {
-      nextValues = [...currentValues, value]
-    }
-
+  const toggleRepo = (id: string) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
-      if (nextValues.length > 0) {
-        next.set(key, nextValues.join(','))
+      const current = prev.get('repo')?.split(',').filter(Boolean) ?? []
+      let nextList: string[]
+      if (current.includes(id)) {
+        nextList = current.filter(v => v !== id)
       } else {
-        next.delete(key)
+        nextList = [...current, id]
       }
+      if (nextList.length > 0) next.set('repo', nextList.join(','))
+      else next.delete('repo')
       return next
     })
   }
 
-  const patch = (key: string, value: string) => {
+  const toggleLogin = (login: string) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
-      if (value) next.set(key, value)
-      else next.delete(key)
+      const current = prev.get('login')?.split(',').filter(Boolean) ?? []
+      let nextList: string[]
+      if (current.includes(login)) {
+        nextList = current.filter(v => v !== login)
+      } else {
+        nextList = [...current, login]
+      }
+      if (nextList.length > 0) next.set('login', nextList.join(','))
+      else next.delete('login')
       return next
     })
   }
 
-  const timeLocale = lang === 'zh' ? 'zh-CN' : 'en-US'
-  const lastSyncStr = lastSyncAt != null ? new Date(lastSyncAt).toLocaleTimeString(timeLocale) : ''
+  const setGran = (g: Granularity) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('gran', g)
+      return next
+    })
+  }
 
-  // 1. 过滤可选的仓库列表
   const fullRepoList = useMemo(() => {
-    if (selectedLogins.length === 0) return allRepoNames
-    return allStats
-      .filter(s => {
-        const repoLogins = Object.keys(s.contributors)
-        return selectedLogins.some(l => repoLogins.includes(l))
-      })
-      .map(s => s.repo)
-  }, [allRepoNames, allStats, selectedLogins])
-
-  const filteredRepoNames = useMemo(() => {
-    const list = repoSearch 
-      ? fullRepoList.filter(r => r.toLowerCase().includes(repoSearch.toLowerCase()))
-      : fullRepoList
+    const list = repoSearch
+      ? allRepoIDs.filter(r => r.toLowerCase().includes(repoSearch.toLowerCase()))
+      : allRepoIDs
     return [...list].sort()
-  }, [fullRepoList, repoSearch])
+  }, [allRepoIDs, repoSearch])
 
   // 2. 过滤可选的用户列表
   const fullContributorList = useMemo(() => {
-    let source = allContributors
+    let source: Record<string, ContributorStats | boolean> = allContributors
     if (selectedRepos.length > 0) {
-      const merged: Record<string, any> = {}
+      const merged: Record<string, boolean> = {}
       allStats
         .filter(s => selectedRepos.includes(s.repo))
         .forEach(s => {
@@ -129,251 +112,219 @@ export function Layout() {
         })
       source = merged
     }
-    return Object.keys(source)
+    const list = Object.keys(source)
       .sort((a, b) => (allContributors[b]?.commit_count ?? 0) - (allContributors[a]?.commit_count ?? 0))
-  }, [allStats, allContributors, selectedRepos])
-
-  // 3. 应用用户搜索过滤
-  const filteredContributorList = useMemo(() => {
-    const list = loginSearch
-      ? fullContributorList.filter(l => l.toLowerCase().includes(loginSearch.toLowerCase()))
-      : fullContributorList
+    
+    if (userSearch) {
+      return list.filter(l => l.toLowerCase().includes(userSearch.toLowerCase()))
+    }
     return list
-  }, [fullContributorList, loginSearch])
-
-  const repoLabel = useMemo(() => {
-    if (selectedRepos.length === 0) return t('app.allRepos')
-    if (selectedRepos.length === 1) return selectedRepos[0]
-    return tf('app.scope.multifmt', { n: selectedRepos.length })
-  }, [selectedRepos, t, tf])
-
-  const loginLabel = useMemo(() => {
-    if (selectedLogins.length === 0) return t('filter.allUsers')
-    if (selectedLogins.length === 1) return selectedLogins[0]
-    return tf('filter.multiUsers', { n: selectedLogins.length })
-  }, [selectedLogins, t, tf])
+  }, [allStats, allContributors, selectedRepos, userSearch])
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: '#f9fafb' }}>
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-          background: '#fff',
-          borderBottom: '1px solid #e5e7eb',
-          padding: '10px 5%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Link
-          to="/"
-          style={{ fontWeight: 700, fontSize: 18, color: '#111', textDecoration: 'none', marginRight: 2 }}
-        >
-          CommitLens
-        </Link>
+    <div style={{ minHeight: '100vh', background: '#f9fafb', color: '#111827', fontFamily: 'Inter, system-ui, sans-serif' }}>
+      {/* 顶部导航 */}
+      <header style={{
+        height: 64, background: '#fff', borderBottom: '1px solid #e5e7eb',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        position: 'sticky', top: 0, zIndex: 50, padding: '0 5%',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: '#4f46e5', letterSpacing: '-0.025em' }}>CommitLens</span>
+          </Link>
 
-        {/* 主导航 */}
-        <nav style={{ display: 'flex', gap: 2, marginRight: 8 }}>
-          <NavLink
-            to={{ pathname: '/', search: searchParams.toString() }}
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            {t('nav.dashboard')}
-          </NavLink>
-          <NavLink
-            to={{ pathname: '/lines', search: searchParams.toString() }}
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            {t('app.section.linesTrend')}
-          </NavLink>
-          <NavLink
-            to={{ pathname: '/prs', search: (() => { const p = new URLSearchParams(searchParams); p.delete('period'); return p.toString() })() }}
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            {t('nav.prs')}
-          </NavLink>
-        </nav>
+          {/* 主导航 */}
+          <nav style={{ display: 'flex', gap: 2, marginRight: 8 }}>
+            <NavLink
+              to={{ pathname: '/', search: searchParams.toString() }}
+              style={({ isActive }) => navLinkStyle(isActive)}
+            >
+              {t('nav.dashboard')}
+            </NavLink>
+            <NavLink
+              to={{ pathname: '/lines', search: searchParams.toString() }}
+              style={({ isActive }) => navLinkStyle(isActive)}
+            >
+              {t('app.section.linesTrend')}
+            </NavLink>
+            <NavLink
+              to={{ pathname: '/prs', search: (() => { const p = new URLSearchParams(searchParams); p.delete('period'); return p.toString() })() }}
+              style={({ isActive }) => navLinkStyle(isActive)}
+            >
+              {t('nav.prs')}
+            </NavLink>
+          </nav>
 
-        {/* Searchable Repo Select (Multi) */}
-        <div ref={repoDropdownRef} style={{ position: 'relative' }}>
-          <div
-            onClick={() => setShowRepoDropdown(!showRepoDropdown)}
-            style={{ ...selectStyle, minWidth: 160, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {repoLabel}
-            </span>
-            <span style={{ fontSize: 10, marginLeft: 8, opacity: 0.5 }}>▼</span>
+          {/* 仓库多选 */}
+          <div ref={repoRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setRepoOpen(!repoOpen)}
+              style={dropdownBtn(selectedRepos.length > 0)}
+            >
+              {selectedRepos.length === 0 ? t('app.allRepos') : tf('app.scope.multifmt', { n: selectedRepos.length })}
+              <ChevronDown />
+            </button>
+            {repoOpen && (
+              <div style={dropdownListStyle}>
+                <input
+                  autoFocus
+                  placeholder="Search repos..."
+                  value={repoSearch}
+                  onChange={e => setRepoSearch(e.target.value)}
+                  style={searchInputStyle}
+                />
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {fullRepoList.map(r => (
+                    <label key={r} style={itemStyle(selectedRepos.includes(r))}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRepos.includes(r)}
+                        onChange={() => toggleRepo(r)}
+                        style={{ marginRight: 8 }}
+                      />
+                      {r}
+                    </label>
+                  ))}
+                  {fullRepoList.length === 0 && <div style={{ padding: '10px 12px', color: '#9ca3af', fontSize: 13 }}>No results</div>}
+                </div>
+              </div>
+            )}
           </div>
 
-          {showRepoDropdown && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, marginTop: 4,
-              background: '#fff', border: '1px solid #d1d5db', borderRadius: 8,
-              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', minWidth: 240, zIndex: 20,
-              padding: 4,
-            }}>
-              <input
-                autoFocus
-                placeholder={t('app.allRepos') + '...'}
-                value={repoSearch}
-                onChange={e => setRepoSearch(e.target.value)}
-                style={{
-                  width: '100%', padding: '6px 8px', border: '1px solid #e5e7eb',
-                  borderRadius: 6, fontSize: 13, marginBottom: 4, outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                <div
-                  onClick={() => { toggleItem('repo', selectedRepos, ''); setShowRepoDropdown(false); setRepoSearch('') }}
-                  style={{
-                    padding: '6px 12px', fontSize: 13, cursor: 'pointer',
-                    background: selectedRepos.length === 0 ? '#f3f4f6' : 'transparent',
-                    borderRadius: 4,
-                  }}
-                >
-                  {t('app.allRepos')}
-                </div>
-                {filteredRepoNames.map(r => (
-                  <div
-                    key={r}
-                    onClick={() => { toggleItem('repo', selectedRepos, r); setRepoSearch('') }}
-                    style={{
-                      padding: '6px 12px', fontSize: 13, cursor: 'pointer',
-                      background: selectedRepos.includes(r) ? '#eef2ff' : 'transparent',
-                      color: selectedRepos.includes(r) ? '#4f46e5' : 'inherit',
-                      fontWeight: selectedRepos.includes(r) ? 600 : 400,
-                      borderRadius: 4,
-                      whiteSpace: 'nowrap',
-                      display: 'flex', alignItems: 'center', gap: 8
-                    }}
-                  >
-                    <input type="checkbox" checked={selectedRepos.includes(r)} readOnly style={{ pointerEvents: 'none' }} />
-                    {r}
-                  </div>
-                ))}
-                {filteredRepoNames.length === 0 && repoSearch && (
-                  <div style={{ padding: '6px 12px', fontSize: 12, color: '#9ca3af' }}>No results</div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <select value={gran} onChange={e => patch('gran', e.target.value)} style={selectStyle}>
-          <option value="week">{t('app.granularity.week')}</option>
-          <option value="month">{t('app.granularity.month')}</option>
-          <option value="quarter">{t('app.granularity.quarter')}</option>
-          <option value="year">{t('app.granularity.year')}</option>
-        </select>
-
-        {/* Searchable Contributor Select (Multi) */}
-        <div ref={loginDropdownRef} style={{ position: 'relative' }}>
-          <div
-            onClick={() => setShowLoginDropdown(!showLoginDropdown)}
-            style={{ ...selectStyle, minWidth: 140, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-          >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {loginLabel}
-            </span>
-            <span style={{ fontSize: 10, marginLeft: 8, opacity: 0.5 }}>▼</span>
+          {/* 粒度选择 */}
+          <div style={{ display: 'flex', background: '#f3f4f6', padding: 3, borderRadius: 8, gap: 1 }}>
+            {(['week', 'month', 'quarter', 'year'] as Granularity[]).map(g => (
+              <button
+                key={g}
+                onClick={() => setGran(g)}
+                style={granBtn(gran === g)}
+              >
+                {t(`app.granularity.${g}` as MessageKey)}
+              </button>
+            ))}
           </div>
 
-          {showLoginDropdown && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, marginTop: 4,
-              background: '#fff', border: '1px solid #d1d5db', borderRadius: 8,
-              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', minWidth: 200, zIndex: 20,
-              padding: 4,
-            }}>
-              <input
-                autoFocus
-                placeholder={t('filter.allUsers') + '...'}
-                value={loginSearch}
-                onChange={e => setLoginSearch(e.target.value)}
-                style={{
-                  width: '100%', padding: '6px 8px', border: '1px solid #e5e7eb',
-                  borderRadius: 6, fontSize: 13, marginBottom: 4, outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-              <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-                <div
-                  onClick={() => { toggleItem('login', selectedLogins, ''); setShowLoginDropdown(false); setLoginSearch('') }}
-                  style={{
-                    padding: '6px 12px', fontSize: 13, cursor: 'pointer',
-                    background: selectedLogins.length === 0 ? '#f3f4f6' : 'transparent',
-                    borderRadius: 4,
-                  }}
-                >
-                  {t('filter.allUsers')}
+          {/* 用户多选 */}
+          <div ref={userRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setUserOpen(!userOpen)}
+              style={dropdownBtn(selectedLogins.length > 0)}
+            >
+              {selectedLogins.length === 0 ? t('filter.allUsers') : tf('filter.multiUsers', { n: selectedLogins.length })}
+              <ChevronDown />
+            </button>
+            {userOpen && (
+              <div style={dropdownListStyle}>
+                <input
+                  autoFocus
+                  placeholder="Search contributors..."
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  style={searchInputStyle}
+                />
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {fullContributorList.map(l => (
+                    <label key={l} style={itemStyle(selectedLogins.includes(l))}>
+                      <input
+                        type="checkbox"
+                        checked={selectedLogins.includes(l)}
+                        onChange={() => toggleLogin(l)}
+                        style={{ marginRight: 8 }}
+                      />
+                      {l}
+                      <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>
+                        {allContributors[l]?.commit_count ?? 0}
+                      </span>
+                    </label>
+                  ))}
+                  {fullContributorList.length === 0 && <div style={{ padding: '10px 12px', color: '#9ca3af', fontSize: 13 }}>No results</div>}
                 </div>
-                {filteredContributorList.map(l => (
-                  <div
-                    key={l}
-                    onClick={() => { toggleItem('login', selectedLogins, l); setLoginSearch('') }}
-                    style={{
-                      padding: '6px 12px', fontSize: 13, cursor: 'pointer',
-                      background: selectedLogins.includes(l) ? '#eef2ff' : 'transparent',
-                      color: selectedLogins.includes(l) ? '#4f46e5' : 'inherit',
-                      fontWeight: selectedLogins.includes(l) ? 600 : 400,
-                      borderRadius: 4,
-                      whiteSpace: 'nowrap',
-                      display: 'flex', alignItems: 'center', gap: 8
-                    }}
-                  >
-                    <input type="checkbox" checked={selectedLogins.includes(l)} readOnly style={{ pointerEvents: 'none' }} />
-                    {l}
-                  </div>
-                ))}
-                {filteredContributorList.length === 0 && loginSearch && (
-                  <div style={{ padding: '6px 12px', fontSize: 12, color: '#9ca3af' }}>No results</div>
-                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          <button
+            onClick={() => syncRepo()}
+            disabled={syncing}
+            style={{
+              padding: '6px 14px', borderRadius: 8, background: '#4f46e5', color: '#fff',
+              border: 'none', fontSize: 13, fontWeight: 600, cursor: syncing ? 'wait' : 'pointer',
+              opacity: syncing ? 0.7 : 1,
+            }}
+          >
+            {syncing ? t('app.syncing') : t('app.refresh')}
+          </button>
         </div>
 
-        <button
-          onClick={() => syncRepo(selectedRepos.length === 1 ? selectedRepos[0] : undefined)}
-          disabled={syncing}
-          style={{
-            padding: '5px 14px',
-            borderRadius: 6,
-            border: 'none',
-            background: syncing ? '#9ca3af' : '#6366f1',
-            color: '#fff',
-            fontSize: 13,
-            cursor: syncing ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {syncing ? t('app.syncing') : t('app.refresh')}
-        </button>
-
-        {lastSyncAt != null && (
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>
-            {t('app.lastSync')} {lastSyncStr}
-          </span>
-        )}
-
-        <select
-          value={lang}
-          onChange={e => setLang(e.target.value as Lang)}
-          style={{ ...selectStyle, marginLeft: 'auto' }}
-        >
-          <option value="en">{t('lang.en')}</option>
-          <option value="zh">{t('lang.zh')}</option>
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <select
+            value={lang}
+            onChange={e => setLang(e.target.value as Lang)}
+            style={{
+              padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db',
+              fontSize: 13, background: '#fff', outline: 'none',
+            }}
+          >
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
       </header>
 
-      <main>
+      {/* 主体内容 */}
+      <main style={{ minHeight: 'calc(100vh - 64px)' }}>
         <Outlet />
       </main>
     </div>
+  )
+}
+
+function dropdownBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db',
+    background: '#fff', fontSize: 13, color: '#374151', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', gap: 8, minWidth: 120,
+    fontWeight: active ? 600 : 400,
+    borderColor: active ? '#4f46e5' : '#d1d5db',
+  }
+}
+
+const dropdownListStyle: React.CSSProperties = {
+  position: 'absolute', top: '110%', left: 0, width: 240,
+  background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
+  boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 100,
+  padding: '4px 0',
+}
+
+const searchInputStyle: React.CSSProperties = {
+  width: 'calc(100% - 24px)', margin: '8px 12px', padding: '6px 10px',
+  borderRadius: 6, border: '1px solid #e5e7eb', fontSize: 13, outline: 'none',
+}
+
+function itemStyle(selected: boolean): React.CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', padding: '8px 12px',
+    fontSize: 13, cursor: 'pointer', background: selected ? '#f5f3ff' : 'transparent',
+    color: selected ? '#4f46e5' : '#374151',
+    userSelect: 'none',
+  }
+}
+
+function granBtn(active: boolean): React.CSSProperties {
+  return {
+    padding: '4px 12px', borderRadius: 6, border: 'none',
+    background: active ? '#fff' : 'transparent',
+    color: active ? '#111827' : '#6b7280',
+    fontSize: 12, fontWeight: active ? 600 : 500, cursor: 'pointer',
+    boxShadow: active ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+  }
+}
+
+function ChevronDown() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   )
 }

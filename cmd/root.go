@@ -92,12 +92,6 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	repos = uniqueRepos
 
-	var repoNames []string
-	for _, r := range repos {
-		repoNames = append(repoNames, r.ID())
-	}
-	_ = repoNames // Ensure it's used if only used for initialization or debug later
-
 	var allStats []*cache.StatsData
 	hasRawCache := false
 	for _, repo := range repos {
