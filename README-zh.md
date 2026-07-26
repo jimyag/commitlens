@@ -68,11 +68,12 @@ userMap:
 
 ### 依赖
 - Go 1.22+
-- Node.js 20+ & npm
+- [nvm](https://github.com/nvm-sh/nvm)
+- [Task](https://taskfile.dev/)
 
 ### 从源码编译
 ```bash
-make build
+task build
 ```
 
 ## 许可证

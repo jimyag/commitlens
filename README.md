@@ -68,11 +68,12 @@ userMap:
 
 ### Requirements
 - Go 1.22+
-- Node.js 20+ & npm
+- [nvm](https://github.com/nvm-sh/nvm)
+- [Task](https://taskfile.dev/)
 
 ### Build from source
 ```bash
-make build
+task build
 ```
 
 ## License

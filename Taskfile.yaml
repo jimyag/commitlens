@@ -1,0 +1,75 @@
+version: "3"
+
+vars:
+  LDFLAGS: "-s -w"
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds:
+      - task --list-all
+    silent: true
+
+  deps:
+    desc: Install frontend dependencies using the Node.js version from .nvmrc
+    cmds:
+      - |
+        bash <<'NVM_SCRIPT'
+        export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+        if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+          echo "nvm is required: https://github.com/nvm-sh/nvm"
+          exit 1
+        fi
+        . "$NVM_DIR/nvm.sh" || exit $?
+        nvm install || exit $?
+        nvm use || exit $?
+        npm --prefix frontend ci
+        NVM_SCRIPT
+
+  frontend:
+    desc: Build the frontend
+    cmds:
+      - |
+        bash <<'NVM_SCRIPT'
+        export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+        if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+          echo "nvm is required: https://github.com/nvm-sh/nvm"
+          exit 1
+        fi
+        . "$NVM_DIR/nvm.sh" || exit $?
+        nvm install || exit $?
+        nvm use || exit $?
+        npm --prefix frontend ci || exit $?
+        npm --prefix frontend run build
+        NVM_SCRIPT
+
+  build:
+    desc: Build commitlens to bin/
+    deps:
+      - frontend
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o bin/commitlens .
+
+  test:
+    desc: Run Go tests
+    cmds:
+      - go test ./...
+
+  run:
+    desc: Run commitlens in TUI mode
+    deps:
+      - build
+    cmds:
+      - ./bin/commitlens --config config.example.yaml
+
+  run-web:
+    desc: Run commitlens in web mode
+    deps:
+      - build
+    cmds:
+      - ./bin/commitlens --web --config config.example.yaml
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf bin frontend/dist
