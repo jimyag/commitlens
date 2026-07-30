@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { Outlet, Link, NavLink, useSearchParams } from 'react-router-dom'
+import { Outlet, Link, NavLink, useSearchParams } from 'react-router'
 import { useApp } from '../context/AppContext'
 import { useI18n, type Lang } from '../i18n/I18nContext'
 import type { MessageKey } from '../i18n/bundles/en'
@@ -141,6 +141,12 @@ export function Layout() {
               style={({ isActive }) => navLinkStyle(isActive)}
             >
               {t('nav.dashboard')}
+            </NavLink>
+            <NavLink
+              to={{ pathname: '/contributors', search: searchParams.toString() }}
+              style={({ isActive }) => navLinkStyle(isActive)}
+            >
+              {t('nav.contributors')}
             </NavLink>
             <NavLink
               to={{ pathname: '/lines', search: searchParams.toString() }}

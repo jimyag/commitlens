@@ -21,6 +21,7 @@ export const zh: Record<keyof typeof en, string> = {
   'app.section.rankTitle': '贡献者排行榜',
 
   'table.contributor': '贡献者',
+  'table.frequency': '提交频率',
   'table.prs': 'PR 数',
   'table.commits': '提交数',
   'table.added': '新增行',
@@ -28,15 +29,16 @@ export const zh: Record<keyof typeof en, string> = {
   'table.empty': '暂无数据',
 
   'trend.emptyWeekly': '暂无统计数据，请先从 TUI/CLI 执行同步或点击刷新。',
-  'trend.truncated': '为保持图表清晰，仅展示提交数前 {n} 名的贡献者（共 {total} 人）；完整排名见下方表格。',
+  'trend.truncated': '为保持图表清晰，仅展示提交数前 {n} 名的贡献者（共 {total} 人）；完整排名见贡献者排行榜页面。',
 
   'chart.repoWide': '全仓库',
   'chart.totalSeries': '全站总计',
-  'chart.sub': '粒度：{g} · 每一行时间轴对齐；悬停查看数值；底部滑块可左右滚动。',
+  'chart.sub': '粒度：{g} · 每一行时间轴对齐；悬停查看数值；使用底部滑块或 Shift + 滚轮调整范围。',
   'chart.prOnTop': '柱顶显示提交数',
   'chart.tooltipLine': '{who}: <span style="font-weight:600">{value}</span> 次提交',
 
-  'nav.dashboard': '仪表盘',
+  'nav.dashboard': '提交数趋势',
+  'nav.contributors': '贡献者排行榜',
   'nav.prs': '提交历史',
 
   'filter.allUsers': '全部贡献者',

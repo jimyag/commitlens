@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState, useRef } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router'
 import { useApp } from '../context/AppContext'
 import { useI18n } from '../i18n/I18nContext'
 import { toPeriodKey, type Granularity, periodToDateRange } from '../utils/periodUtils'

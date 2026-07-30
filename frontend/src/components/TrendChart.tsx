@@ -1,11 +1,25 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useEffect, useRef } from 'react'
 import type { EChartsOption } from 'echarts'
 import type { BarSeriesOption, GridComponentOption, XAXisComponentOption, YAXisComponentOption } from 'echarts'
-import ReactECharts from 'echarts-for-react'
+import * as echarts from 'echarts/core'
+import { BarChart } from 'echarts/charts'
+import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components'
+import { LabelLayout } from 'echarts/features'
+import { CanvasRenderer } from 'echarts/renderers'
+import ReactEChartsCore from 'echarts-for-react/esm/core'
 import type { MessageKey } from '../i18n/bundles/en'
 import { useI18n } from '../i18n/I18nContext'
 import type { ContributorStats, WeeklyEntry } from '../api'
 import { toPeriodKey, type Granularity } from '../utils/periodUtils'
+
+echarts.use([
+  BarChart,
+  DataZoomComponent,
+  GridComponent,
+  TooltipComponent,
+  LabelLayout,
+  CanvasRenderer,
+])
 
 export type { Granularity }
 
@@ -53,9 +67,12 @@ const L_NAME = 148
 const R_PAD = 16
 /** 全仓库图与下方各人图之间的空隙 (留给 DataZoom) */
 const GAP_AFTER_TOTAL = 60
+const MIN_ZOOM_RANGE = 5
 
 export function TrendChart({ weekly, granularity, metric = 'commits', contributors, selectedLogins = [], onBarClick }: Props) {
   const { t } = useI18n()
+  const chartRef = useRef<ReactEChartsCore>(null)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
     () => buildTrendOption(weekly, granularity, metric, contributors, selectedLogins, { t }),
     [weekly, granularity, metric, contributors, selectedLogins, t],
@@ -73,6 +90,49 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
     [onBarClick, totalSeriesName],
   )
 
+  useEffect(() => {
+    const container = chartContainerRef.current
+    if (!container) return
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.shiftKey) return
+
+      const instance = chartRef.current?.getEchartsInstance()
+      const zoom = (instance?.getOption().dataZoom as { start?: number; end?: number }[] | undefined)?.[0]
+      if (!instance || typeof zoom?.start !== 'number' || typeof zoom.end !== 'number') return
+
+      event.preventDefault()
+
+      const rawDelta = event.deltaY || event.deltaX
+      const deltaPixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? rawDelta * 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? rawDelta * window.innerHeight
+          : rawDelta
+      const scale = Math.exp(Math.max(-100, Math.min(100, deltaPixels)) * 0.0025)
+      const currentRange = zoom.end - zoom.start
+      const nextRange = Math.max(MIN_ZOOM_RANGE, Math.min(100, currentRange * scale))
+
+      const rect = container.getBoundingClientRect()
+      const plotLeft = rect.left + L_LEFT + L_NAME
+      const plotWidth = Math.max(1, rect.width - L_LEFT - L_NAME - R_PAD)
+      const pointerRatio = Math.max(0, Math.min(1, (event.clientX - plotLeft) / plotWidth))
+      const anchor = zoom.start + currentRange * pointerRatio
+      let start = anchor - nextRange * pointerRatio
+      start = Math.max(0, Math.min(100 - nextRange, start))
+
+      instance.dispatchAction({
+        type: 'dataZoom',
+        dataZoomIndex: 0,
+        start,
+        end: start + nextRange,
+      })
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheel)
+  }, [option])
+
   if (!option) {
     return <div style={{ color: '#6b7280', padding: 24 }}>{t('trend.emptyWeekly')}</div>
   }
@@ -84,11 +144,9 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
           {t('trend.truncated').replace('{n}', String(MAX_CONTRIBUTOR_CHARTS)).replace('{total}', String(totalLoginCount))}
         </p>
       )}
-      <div style={{ 
-        position: 'relative', 
-        width: '100%', 
-        maxHeight: '700px', 
-        overflowY: 'auto',
+      <div ref={chartContainerRef} style={{
+        position: 'relative',
+        width: '100%',
         border: '1px solid #f3f4f6',
         borderRadius: 8,
       }}>
@@ -154,7 +212,9 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
             </span>
           </div>
         ))}
-        <ReactECharts
+        <ReactEChartsCore
+          ref={chartRef}
+          echarts={echarts}
           option={option as EChartsOption}
           style={{ width: '100%', height: heightPx, minWidth: 400 }}
           notMerge
@@ -408,7 +468,12 @@ function buildTrendOption(
         dataBackground: { lineStyle: { color: AXISLINE }, areaStyle: { color: 'rgba(99, 102, 241, 0.08)' } },
         textStyle: { color: AXIS, fontSize: 10 },
       },
-      { type: 'inside', xAxisIndex: xIdx },
+      {
+        type: 'inside',
+        xAxisIndex: xIdx,
+        zoomOnMouseWheel: false,
+        moveOnMouseWheel: false,
+      },
     ],
     grid: grids,
     xAxis: xAxes,

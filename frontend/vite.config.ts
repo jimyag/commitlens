@@ -10,5 +10,23 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'zrender',
+              test: /node_modules[\\/]zrender[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'echarts',
+              test: /node_modules[\\/]echarts[\\/]/,
+              priority: 10,
+            },
+          ],
+        },
+      },
+    },
   },
 })

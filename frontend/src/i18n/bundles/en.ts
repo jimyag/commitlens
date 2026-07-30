@@ -19,6 +19,7 @@ export const en = {
   'app.section.rankTitle': 'Contributors',
 
   'table.contributor': 'Contributor',
+  'table.frequency': 'Commit frequency',
   'table.prs': 'PRs', // We might still use this in some contexts, but let's hide in ranking
   'table.commits': 'Commits',
   'table.added': 'Lines +',
@@ -26,16 +27,17 @@ export const en = {
   'table.empty': 'No data',
 
   'trend.emptyWeekly': 'No weekly data yet; run sync from the TUI/CLI or click Refresh.',
-  'trend.truncated': 'For readability, the chart shows the top {n} contributors by commit count ({total} people); see the ranking table below for everyone.',
+  'trend.truncated': 'For readability, the chart shows the top {n} contributors by commit count ({total} people); see the Contributors page for everyone.',
 
   'chart.repoWide': 'Repo-wide',
   'chart.totalSeries': 'Repo total',
   'chart.sub':
-    'Granularity: {g} · same periods in each row; hover a bar; bottom slider scrolls long ranges.',
+    'Granularity: {g} · same periods in each row; hover a bar; use the bottom slider or Shift + wheel to adjust the range.',
   'chart.prOnTop': 'Commit count on top',
   'chart.tooltipLine': '{who}: <span style="font-weight:600">{value}</span> commits',
 
-  'nav.dashboard': 'Dashboard',
+  'nav.dashboard': 'Commit trend',
+  'nav.contributors': 'Contributors',
   'nav.prs': 'Commits',
 
   'filter.allUsers': 'All contributors',

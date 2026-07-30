@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router'
 import { useApp } from './context/AppContext'
 import { mergeContributors, mergeWeekly } from './utils/statsUtils'
 import type { ContributorStats } from './api'
-import { ContributorTable } from './components/ContributorTable'
 import { TrendChart } from './components/TrendChart'
 import type { Granularity } from './components/TrendChart'
 import { useI18n } from './i18n/I18nContext'
@@ -42,7 +41,7 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
   const contributors = useMemo(() => {
     const merged = mergeContributors(filteredStats)
     if (selectedLogins.length === 0) return merged
-    
+
     const filtered: Record<string, ContributorStats> = {}
     selectedLogins.forEach(l => {
       if (merged[l]) filtered[l] = merged[l]
@@ -64,8 +63,12 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
   const titleKey: MessageKey = metric === 'commits' ? 'app.section.trendTitle' : 'app.section.linesTrend'
 
   return (
-    <div style={{ padding: '20px 5% 32px' }}>
-      <section style={{ marginBottom: 40 }}>
+    <div style={{
+      boxSizing: 'border-box',
+      minHeight: 'calc(100svh - 64px)',
+      padding: '20px 5% 32px',
+    }}>
+      <section>
         <div style={{ marginBottom: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 6px', color: '#374151' }}>
             {t(titleKey)}
@@ -75,7 +78,12 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
             {tf('chart.sub', { g: t(granularityKey[gran]) })}
           </p>
         </div>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 16, background: '#fff' }}>
+        <div style={{
+          background: '#fff',
+          border: '1px solid #e5e7eb',
+          borderRadius: 8,
+          padding: 16,
+        }}>
           <TrendChart
             weekly={weekly}
             granularity={gran}
@@ -84,15 +92,6 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
             selectedLogins={selectedLogins}
             onBarClick={handleBarClick}
           />
-        </div>
-      </section>
-
-      <section>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12, color: '#374151' }}>
-          {t('app.section.rankTitle')}
-        </h2>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
-          <ContributorTable contributors={contributors} />
         </div>
       </section>
     </div>
