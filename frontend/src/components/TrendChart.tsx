@@ -100,11 +100,13 @@ const R_PAD = 16
 /** 全仓库图与下方各人图之间的空隙 (留给 DataZoom) */
 const GAP_AFTER_TOTAL = 60
 const MIN_ZOOM_RANGE = 5
+const MIN_PERIOD_LABEL_WIDTH = 18
 
 export function TrendChart({ weekly, granularity, metric = 'commits', contributors, selectedLogins = [], comparisons, onBarClick }: Props) {
   const { t } = useI18n()
   const chartRef = useRef<ReactEChartsCore>(null)
   const chartContainerRef = useRef<HTMLDivElement>(null)
+  const periodLabelsVisibleRef = useRef<boolean | null>(null)
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
     () => buildTrendOption(weekly, granularity, metric, contributors, selectedLogins, comparisons, { t }),
     [weekly, granularity, metric, contributors, selectedLogins, comparisons, t],
@@ -122,9 +124,41 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
     [onBarClick, totalSeriesName],
   )
 
+  const updatePeriodLabelVisibility = useCallback(() => {
+    const instance = chartRef.current?.getEchartsInstance()
+    const container = chartContainerRef.current
+    if (!instance || !container) return
+
+    const currentOption = instance.getOption()
+    const zoom = (currentOption.dataZoom as { start?: number; end?: number }[] | undefined)?.[0]
+    const xAxes = currentOption.xAxis as { data?: unknown[] }[] | undefined
+    const totalPeriods = xAxes?.[0]?.data?.length ?? 0
+    if (
+      !xAxes
+      || totalPeriods === 0
+      || typeof zoom?.start !== 'number'
+      || typeof zoom.end !== 'number'
+    ) return
+
+    const visiblePeriods = Math.max(1, Math.ceil(totalPeriods * (zoom.end - zoom.start) / 100))
+    const plotWidth = Math.max(1, container.clientWidth - L_LEFT - L_NAME - R_PAD)
+    const visible = plotWidth / visiblePeriods >= MIN_PERIOD_LABEL_WIDTH
+    if (periodLabelsVisibleRef.current === visible) return
+    periodLabelsVisibleRef.current = visible
+
+    instance.setOption({
+      xAxis: xAxes.map((_, index) => ({
+        axisLabel: {
+          show: visible && (index === 0 || index === xAxes.length - 1),
+        },
+      })),
+    })
+  }, [])
+
   useEffect(() => {
     const container = chartContainerRef.current
     if (!container) return
+    periodLabelsVisibleRef.current = null
 
     const handleWheel = (event: WheelEvent) => {
       const isHorizontalPan = !event.shiftKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)
@@ -177,9 +211,16 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
       })
     }
 
+    const resizeObserver = new ResizeObserver(updatePeriodLabelVisibility)
+    resizeObserver.observe(container)
+    const frame = requestAnimationFrame(updatePeriodLabelVisibility)
     container.addEventListener('wheel', handleWheel, { passive: false })
-    return () => container.removeEventListener('wheel', handleWheel)
-  }, [option])
+    return () => {
+      cancelAnimationFrame(frame)
+      resizeObserver.disconnect()
+      container.removeEventListener('wheel', handleWheel)
+    }
+  }, [option, updatePeriodLabelVisibility])
 
   if (!option) {
     return <div style={{ color: '#6b7280', padding: 24 }}>{t('trend.emptyWeekly')}</div>
@@ -266,7 +307,10 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
           option={option as EChartsOption}
           style={{ width: '100%', height: heightPx, minWidth: 400 }}
           notMerge
-          onEvents={{ click: handleBarClick }}
+          onEvents={{
+            click: handleBarClick,
+            datazoom: updatePeriodLabelVisibility,
+          }}
         />
       </div>
     </div>

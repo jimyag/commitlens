@@ -70,6 +70,11 @@ export interface ComparisonSet {
   comparisons: Record<string, PeriodComparison>
 }
 
+export interface SelectedComparison {
+  anchor: ComparisonPoint
+  comparisons: ComparisonPoint[]
+}
+
 export const api = {
   getRepos: () => axios.get<RepositoryList>('/api/repos'),
   getStats: (repo?: string) =>
@@ -84,6 +89,22 @@ export const api = {
         repo: params.repositories?.join(',') || undefined,
         login: params.logins?.join(',') || undefined,
         gran: params.granularity,
+      },
+    }),
+  getSelectedComparison: (params: {
+    repositories?: string[]
+    logins?: string[]
+    granularity: string
+    anchor: string
+    comparisons: string[]
+  }) =>
+    axios.get<SelectedComparison>('/api/comparison/selected', {
+      params: {
+        repo: params.repositories?.join(',') || undefined,
+        login: params.logins?.join(',') || undefined,
+        gran: params.granularity,
+        anchor: params.anchor,
+        compare: params.comparisons.join(','),
       },
     }),
   getCommits: (params: { repo?: string; from?: string; to?: string; login?: string; page?: number; per_page?: number }) =>

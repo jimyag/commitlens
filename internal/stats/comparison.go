@@ -45,6 +45,11 @@ type ComparisonSet struct {
 	Comparisons map[string]PeriodComparison `json:"comparisons"`
 }
 
+type SelectedComparison struct {
+	Anchor      ComparisonPoint   `json:"anchor"`
+	Comparisons []ComparisonPoint `json:"comparisons"`
+}
+
 type ComparisonOptions struct {
 	Granularity Granularity
 	Logins      []string
@@ -135,36 +140,8 @@ func comparePeriod(
 	location *time.Location,
 ) PeriodComparison {
 	anchor := windowForKey(anchorKey, options.Granularity, location)
-	elapsedEnd := anchor.to
-	if now.Before(elapsedEnd) {
-		elapsedEnd = now
-	}
-	elapsed := elapsedEnd.Sub(anchor.from)
-	if elapsed < 0 {
-		elapsed = 0
-	}
-
-	point := func(window periodWindow) ComparisonPoint {
-		if !window.valid {
-			return ComparisonPoint{Key: window.key, Label: window.label}
-		}
-		end := window.from.Add(elapsed)
-		if end.After(window.to) {
-			end = window.to
-		}
-		available := !coverageStart.IsZero() && window.to.After(coverageStart) && !window.from.After(now)
-		value := ComparisonMetrics{}
-		if available {
-			value = metricsInRange(data, options.Logins, window.from, end, location)
-		}
-		return ComparisonPoint{
-			Key:       window.key,
-			Label:     window.label,
-			Available: available,
-			Complete:  !window.to.After(now),
-			Metrics:   value,
-		}
-	}
+	elapsed := comparisonElapsed(anchor, now)
+	point := comparisonPointBuilder(data, options.Logins, coverageStart, now, location, elapsed)
 
 	historyWindows := historicalWindows(anchor, options.Granularity, location)
 	history := make([]ComparisonPoint, 0, len(historyWindows))
@@ -176,6 +153,94 @@ func comparePeriod(
 		Anchor:     point(anchor),
 		Previous:   point(previousWindow(anchor, options.Granularity, location)),
 		Historical: history,
+	}
+}
+
+func CompareSelectedPeriods(
+	data []*cache.StatsData,
+	options ComparisonOptions,
+	anchorKey string,
+	comparisonKeys []string,
+) SelectedComparison {
+	location := options.Location
+	if location == nil {
+		location = time.Local
+	}
+	now := options.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	now = now.In(location)
+
+	var coverageStart time.Time
+	for _, repository := range data {
+		for day := range repository.Daily {
+			date, err := time.ParseInLocation("2006-01-02", day, location)
+			if err == nil && (coverageStart.IsZero() || date.Before(coverageStart)) {
+				coverageStart = date
+			}
+		}
+	}
+
+	anchor := windowForKey(anchorKey, options.Granularity, location)
+	point := comparisonPointBuilder(
+		data,
+		options.Logins,
+		coverageStart,
+		now,
+		location,
+		comparisonElapsed(anchor, now),
+	)
+	result := SelectedComparison{
+		Anchor:      point(anchor),
+		Comparisons: make([]ComparisonPoint, 0, len(comparisonKeys)),
+	}
+	for _, key := range comparisonKeys {
+		result.Comparisons = append(result.Comparisons, point(windowForKey(key, options.Granularity, location)))
+	}
+	return result
+}
+
+func comparisonElapsed(anchor periodWindow, now time.Time) time.Duration {
+	elapsedEnd := anchor.to
+	if now.Before(elapsedEnd) {
+		elapsedEnd = now
+	}
+	elapsed := elapsedEnd.Sub(anchor.from)
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
+func comparisonPointBuilder(
+	data []*cache.StatsData,
+	logins []string,
+	coverageStart time.Time,
+	now time.Time,
+	location *time.Location,
+	elapsed time.Duration,
+) func(periodWindow) ComparisonPoint {
+	return func(window periodWindow) ComparisonPoint {
+		if !window.valid {
+			return ComparisonPoint{Key: window.key, Label: window.label}
+		}
+		end := window.from.Add(elapsed)
+		if end.After(window.to) {
+			end = window.to
+		}
+		available := !coverageStart.IsZero() && window.to.After(coverageStart) && !window.from.After(now)
+		value := ComparisonMetrics{}
+		if available {
+			value = metricsInRange(data, logins, window.from, end, location)
+		}
+		return ComparisonPoint{
+			Key:       window.key,
+			Label:     window.label,
+			Available: available,
+			Complete:  !window.to.After(now),
+			Metrics:   value,
+		}
 	}
 }
 

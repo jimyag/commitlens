@@ -212,3 +212,45 @@ func TestGetComparisonUsesSelectedRepositories(t *testing.T) {
 		t.Fatalf("selected repository commits = %d, want 3", got)
 	}
 }
+
+func TestGetSelectedComparisonUsesRequestedPeriods(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	statsCache := cache.NewStatsCache(t.TempDir())
+	if err := statsCache.Save(&cache.StatsData{
+		Repo: "sample/alpha",
+		Daily: map[string]*cache.WeeklyEntry{
+			"2026-06-10": {TotalCommits: 2, Contributors: map[string]*cache.ContributorWeeklyStats{}},
+			"2026-07-10": {TotalCommits: 3, Contributors: map[string]*cache.ContributorWeeklyStats{}},
+		},
+		Contributors: map[string]*cache.ContributorStats{},
+		Weekly:       map[string]*cache.WeeklyEntry{},
+	}); err != nil {
+		t.Fatalf("save stats: %v", err)
+	}
+
+	server := &Server{
+		engine:     gin.New(),
+		repoNames:  []string{"sample/alpha"},
+		statsCache: statsCache,
+	}
+	server.registerAPI()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/comparison/selected?gran=month&anchor=2026-07&compare=2026-06",
+		nil,
+	)
+	server.engine.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/comparison/selected status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var body statdata.SelectedComparison
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Anchor.Metrics.Commits != 3 || body.Comparisons[0].Metrics.Commits != 2 {
+		t.Fatalf("unexpected selected comparison: %#v", body)
+	}
+}

@@ -6,7 +6,12 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import { LabelLayout } from 'echarts/features'
 import { CanvasRenderer } from 'echarts/renderers'
 import ReactEChartsCore from 'echarts-for-react/esm/core'
-import type { ComparisonMetrics, ComparisonPoint, PeriodComparison } from '../api'
+import type {
+  ComparisonMetrics,
+  ComparisonPoint,
+  ComparisonSet,
+  SelectedComparison,
+} from '../api'
 import { useI18n } from '../i18n/I18nContext'
 
 echarts.use([
@@ -21,10 +26,17 @@ echarts.use([
 type Metric = 'commits' | 'lines'
 
 interface Props {
-  comparison?: PeriodComparison
+  comparisonSet: ComparisonSet | null
+  selection: SelectedComparison | null
+  anchorKey: string
+  comparisonKeys: string[]
   metric: Metric
   filteredByContributors: boolean
+  onAnchorChange: (period: string) => void
+  onComparisonKeysChange: (periods: string[]) => void
 }
+
+const MAX_COMPARISON_PERIODS = 5
 
 function metricValue(metrics: ComparisonMetrics, metric: keyof ComparisonMetrics) {
   return metrics[metric]
@@ -37,22 +49,50 @@ function formatChange(current: number, baseline: number) {
   return `${sign}${delta.toLocaleString()} (${sign}${(delta / baseline * 100).toFixed(1)}%)`
 }
 
-export function ComparisonChart({ comparison, metric, filteredByContributors }: Props) {
+export function ComparisonChart({
+  comparisonSet,
+  selection,
+  anchorKey,
+  comparisonKeys,
+  metric,
+  filteredByContributors,
+  onAnchorChange,
+  onComparisonKeysChange,
+}: Props) {
   const { t } = useI18n()
+  const anchorOptions = useMemo(
+    () => comparisonSet?.periods.slice(1).reverse() ?? [],
+    [comparisonSet],
+  )
+  const comparisonOptions = useMemo(() => {
+    if (!comparisonSet || !anchorKey) return []
+    const anchorIndex = comparisonSet.periods.indexOf(anchorKey)
+    const points = new Map<string, ComparisonPoint>()
+    comparisonSet.periods.slice(0, Math.max(0, anchorIndex)).forEach(period => {
+      const point = comparisonSet.comparisons[period]?.anchor
+      if (point?.available) points.set(point.key, point)
+    })
+    const automatic = comparisonSet.comparisons[anchorKey]
+    if (automatic) {
+      [automatic.previous, ...automatic.historical].forEach(point => {
+        if (point.available && point.key !== anchorKey) points.set(point.key, point)
+      })
+    }
+    return Array.from(points.values()).sort((a, b) => b.key.localeCompare(a.key))
+  }, [anchorKey, comparisonSet])
+
   const option = useMemo<EChartsOption | null>(() => {
-    if (!comparison?.anchor.available) return null
+    if (!selection?.anchor.available) return null
 
     const points: ComparisonPoint[] = [
-      comparison.anchor,
-      comparison.previous,
-      ...comparison.historical,
+      selection.anchor,
+      ...selection.comparisons,
     ]
     const categories = points.map((point, index) => {
-      if (index === 0) return `${t('comparison.current')}\n${point.label}`
-      if (index === 1) return `${t('comparison.previous')}\n${point.label}`
-      return `${t('comparison.samePeriod')}\n${point.label}`
+      if (index === 0) return `${t('comparison.anchor')}\n${point.label}`
+      return `${t('comparison.baseline')}\n${point.label}`
     })
-    const current = comparison.anchor.metrics
+    const anchor = selection.anchor.metrics
     const makeData = (key: keyof ComparisonMetrics) =>
       points.map(point => point.available ? metricValue(point.metrics, key) : null)
 
@@ -107,7 +147,7 @@ export function ComparisonChart({ comparison, metric, filteredByContributors }: 
               : item.seriesName === t('table.added') ? 'additions' : 'deletions'
             output += `<div>${item.seriesName}: <b>${item.value.toLocaleString()}</b></div>`
             if (list[0].dataIndex > 0) {
-              output += `<div style="color:#d1d5db">${t('comparison.currentVsPeriod')}: ${formatChange(metricValue(current, key), item.value)}</div>`
+              output += `<div style="color:#d1d5db">${t('comparison.anchorDifference')}: ${formatChange(metricValue(anchor, key), item.value)}</div>`
             }
           }
           return output
@@ -128,9 +168,19 @@ export function ComparisonChart({ comparison, metric, filteredByContributors }: 
       },
       series,
     }
-  }, [comparison, metric, t])
+  }, [metric, selection, t])
 
-  if (!comparison || !option) return null
+  if (!comparisonSet || anchorOptions.length === 0) return null
+
+  const toggleComparison = (period: string) => {
+    if (comparisonKeys.includes(period)) {
+      if (comparisonKeys.length === 1) return
+      onComparisonKeysChange(comparisonKeys.filter(key => key !== period))
+      return
+    }
+    if (comparisonKeys.length >= MAX_COMPARISON_PERIODS) return
+    onComparisonKeysChange([...comparisonKeys, period])
+  }
 
   return (
     <section style={{
@@ -140,21 +190,128 @@ export function ComparisonChart({ comparison, metric, filteredByContributors }: 
       border: '1px solid #e5e7eb',
       borderRadius: 8,
     }}>
-      <div style={{ marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 14, color: '#374151' }}>
-          {t('comparison.title')} · {comparison.anchor.label}
-        </h3>
-        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6b7280' }}>
-          {filteredByContributors ? t('comparison.selectedContributors') : t('comparison.repoScope')}
-          {!comparison.anchor.complete ? ` · ${t('comparison.inProgress')}` : ''}
-        </p>
+      <div style={{
+        marginBottom: 8,
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 16,
+        flexWrap: 'wrap',
+      }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 14, color: '#374151' }}>
+            {t('comparison.title')} · {selection?.anchor.label ?? anchorKey}
+          </h3>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: '#6b7280' }}>
+            {filteredByContributors ? t('comparison.selectedContributors') : t('comparison.repoScope')}
+            {selection?.anchor && !selection.anchor.complete ? ` · ${t('comparison.inProgress')}` : ''}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+          <label style={{ display: 'grid', gap: 3, fontSize: 11, color: '#6b7280' }}>
+            {t('comparison.anchorPeriod')}
+            <select
+              value={anchorKey}
+              onChange={event => onAnchorChange(event.target.value)}
+              style={{
+                height: 32,
+                minWidth: 132,
+                padding: '0 28px 0 10px',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                background: '#fff',
+                color: '#374151',
+              }}
+            >
+              {anchorOptions.map(period => (
+                <option key={period} value={period}>{period}</option>
+              ))}
+            </select>
+          </label>
+          <div style={{ display: 'grid', gap: 3, fontSize: 11, color: '#6b7280' }}>
+            <span>{t('comparison.comparePeriods')}</span>
+            <details style={{ position: 'relative' }}>
+              <summary style={{
+                boxSizing: 'border-box',
+                height: 32,
+                minWidth: 132,
+                padding: '7px 10px',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                background: '#fff',
+                color: '#374151',
+                cursor: 'pointer',
+                listStylePosition: 'inside',
+                userSelect: 'none',
+              }}>
+                {t('comparison.selectedPeriods').replace('{n}', String(comparisonKeys.length))}
+              </summary>
+              <div style={{
+                position: 'absolute',
+                zIndex: 20,
+                top: 36,
+                right: 0,
+                width: 220,
+                maxHeight: 280,
+                overflowY: 'auto',
+                padding: 6,
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                background: '#fff',
+                boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+              }}>
+                {comparisonOptions.map(point => {
+                  const checked = comparisonKeys.includes(point.key)
+                  const disabled = (checked && comparisonKeys.length === 1)
+                    || (!checked && comparisonKeys.length >= MAX_COMPARISON_PERIODS)
+                  return (
+                    <label
+                      key={point.key}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '7px 8px',
+                        color: disabled ? '#9ca3af' : '#374151',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => toggleComparison(point.key)}
+                      />
+                      <span>{point.label}</span>
+                    </label>
+                  )
+                })}
+                <div style={{
+                  borderTop: '1px solid #f3f4f6',
+                  marginTop: 4,
+                  padding: '7px 8px 3px',
+                  color: '#9ca3af',
+                  fontSize: 10,
+                }}>
+                  {t('comparison.selectionLimit')}
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
-      <ReactEChartsCore
-        echarts={echarts}
-        option={option}
-        notMerge
-        style={{ width: '100%', height: 230 }}
-      />
+      {option ? (
+        <ReactEChartsCore
+          echarts={echarts}
+          option={option}
+          notMerge
+          style={{ width: '100%', height: 230 }}
+        />
+      ) : (
+        <div style={{ height: 230, display: 'grid', placeItems: 'center', color: '#9ca3af', fontSize: 12 }}>
+          {t('comparison.loading')}
+        </div>
+      )}
     </section>
   )
 }

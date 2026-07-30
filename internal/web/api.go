@@ -20,6 +20,7 @@ func (s *Server) registerAPI() {
 	api.GET("/repos", s.handleGetRepos)
 	api.GET("/commits", s.handleGetCommits) // Renamed from /prs
 	api.GET("/comparison", s.handleGetComparison)
+	api.GET("/comparison/selected", s.handleGetSelectedComparison)
 	api.POST("/sync", s.handleSync)
 }
 
@@ -114,6 +115,53 @@ func (s *Server) handleGetComparison(c *gin.Context) {
 		Logins:      queryList(c, "login"),
 		Location:    location,
 	})
+	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) handleGetSelectedComparison(c *gin.Context) {
+	granularity := stats.Granularity(c.DefaultQuery("gran", string(stats.GranularityWeek)))
+	switch granularity {
+	case stats.GranularityWeek, stats.GranularityMonth, stats.GranularityQuarter, stats.GranularityYear:
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid granularity"})
+		return
+	}
+
+	anchor := c.Query("anchor")
+	comparisonKeys := queryList(c, "compare")
+	if anchor == "" || len(comparisonKeys) == 0 || len(comparisonKeys) > 5 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "select an anchor and one to five comparison periods"})
+		return
+	}
+
+	repositories := queryList(c, "repo")
+	if len(repositories) == 0 {
+		repositories = s.repoNames
+	}
+	data := make([]*cache.StatsData, 0, len(repositories))
+	for _, repository := range repositories {
+		value, err := s.statsCache.Load(repository)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data = append(data, value)
+	}
+
+	location := time.Local
+	if s.cfg != nil {
+		configured, err := s.cfg.ReportingLocation()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		location = configured
+	}
+	result := stats.CompareSelectedPeriods(data, stats.ComparisonOptions{
+		Granularity: granularity,
+		Logins:      queryList(c, "login"),
+		Location:    location,
+	}, anchor, comparisonKeys)
 	c.JSON(http.StatusOK, result)
 }
 

@@ -100,6 +100,32 @@ func TestBuildComparisonsFiltersContributors(t *testing.T) {
 	}
 }
 
+func TestCompareSelectedPeriodsUsesAnchorElapsedTime(t *testing.T) {
+	data := []*cache.StatsData{{
+		Repo: "sample/alpha",
+		Daily: map[string]*cache.WeeklyEntry{
+			"2026-06-01": dailyCommits(2),
+			"2026-06-02": dailyCommits(3),
+			"2026-06-03": dailyCommits(50),
+			"2026-07-01": dailyCommits(1),
+			"2026-07-02": dailyCommits(1),
+		},
+	}}
+
+	result := CompareSelectedPeriods(data, ComparisonOptions{
+		Granularity: GranularityMonth,
+		Location:    time.UTC,
+		Now:         time.Date(2026, time.July, 3, 0, 0, 0, 0, time.UTC),
+	}, "2026-07", []string{"2026-06"})
+
+	if result.Anchor.Metrics.Commits != 2 {
+		t.Fatalf("anchor commits = %d, want 2", result.Anchor.Metrics.Commits)
+	}
+	if got := result.Comparisons[0].Metrics.Commits; got != 5 {
+		t.Fatalf("comparison commits = %d, want 5", got)
+	}
+}
+
 func dailyCommits(commits int) *cache.WeeklyEntry {
 	return &cache.WeeklyEntry{
 		TotalCommits: commits,

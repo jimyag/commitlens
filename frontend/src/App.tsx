@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useApp } from './context/AppContext'
 import { mergeContributors, mergeWeekly } from './utils/statsUtils'
-import { api, type ComparisonSet, type ContributorStats } from './api'
+import {
+  api,
+  type ComparisonSet,
+  type ContributorStats,
+  type PeriodComparison,
+  type SelectedComparison,
+} from './api'
 import { TrendChart } from './components/TrendChart'
 import type { Granularity } from './components/TrendChart'
 import { ComparisonChart } from './components/ComparisonChart'
@@ -14,6 +20,17 @@ const granularityKey: Record<Granularity, MessageKey> = {
   month: 'app.granularity.month',
   quarter: 'app.granularity.quarter',
   year: 'app.granularity.year',
+}
+
+const MAX_COMPARISON_PERIODS = 5
+
+function defaultComparisonKeys(comparison?: PeriodComparison) {
+  if (!comparison) return []
+  return [comparison.previous, ...comparison.historical]
+    .filter(point => point.available)
+    .map(point => point.key)
+    .filter((key, index, keys) => key !== comparison.anchor.key && keys.indexOf(key) === index)
+    .slice(0, MAX_COMPARISON_PERIODS)
 }
 
 export default function App({ metric = 'commits' }: { metric?: 'commits' | 'lines' }) {
@@ -52,6 +69,10 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
 
   const weekly = mergeWeekly(filteredStats)
   const [comparisonSet, setComparisonSet] = useState<ComparisonSet | null>(null)
+  const [selectedComparisonResult, setSelectedComparisonResult] = useState<{
+    key: string
+    value: SelectedComparison
+  } | null>(null)
   const repositoryKey = selectedRepos.join(',')
   const loginKey = selectedLogins.join(',')
 
@@ -69,10 +90,82 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
     return () => { cancelled = true }
   }, [allStats, gran, loginKey, repositoryKey, selectedLogins, selectedRepos])
 
-  const latestComparison = useMemo(() => {
-    const latest = comparisonSet?.periods.at(-1)
-    return latest ? comparisonSet?.comparisons[latest] : undefined
-  }, [comparisonSet])
+  const selectedAnchor = useMemo(() => {
+    const requested = searchParams.get('compareAnchor')
+    if (requested && (comparisonSet?.periods.indexOf(requested) ?? -1) > 0) return requested
+    return (comparisonSet?.periods.length ?? 0) > 1 ? comparisonSet?.periods.at(-1) ?? '' : ''
+  }, [comparisonSet, searchParams])
+
+  const selectedComparisonPeriods = useMemo(() => {
+    if (!comparisonSet || !selectedAnchor) return []
+    const anchorIndex = comparisonSet.periods.indexOf(selectedAnchor)
+    const automatic = defaultComparisonKeys(comparisonSet.comparisons[selectedAnchor])
+    const allowed = new Set([
+      ...comparisonSet.periods.slice(0, Math.max(0, anchorIndex)),
+      ...automatic,
+    ])
+    const requested = searchParams.get('comparePeriods')
+    if (requested === null) return automatic
+    const selected = requested
+      .split(',')
+      .filter((key, index, keys) =>
+        allowed.has(key) && key !== selectedAnchor && keys.indexOf(key) === index,
+      )
+      .slice(0, MAX_COMPARISON_PERIODS)
+    return selected.length > 0 ? selected : automatic
+  }, [comparisonSet, searchParams, selectedAnchor])
+  const selectedComparisonKey = selectedComparisonPeriods.join(',')
+  const selectionRequestKey = [
+    gran,
+    repositoryKey,
+    loginKey,
+    selectedAnchor,
+    selectedComparisonKey,
+  ].join('|')
+
+  useEffect(() => {
+    if (!selectedAnchor || selectedComparisonPeriods.length === 0) return
+
+    let cancelled = false
+    void api.getSelectedComparison({
+      repositories: selectedRepos,
+      logins: selectedLogins,
+      granularity: gran,
+      anchor: selectedAnchor,
+      comparisons: selectedComparisonPeriods,
+    }).then(response => {
+      if (!cancelled) setSelectedComparisonResult({
+        key: selectionRequestKey,
+        value: response.data,
+      })
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [
+    allStats,
+    gran,
+    loginKey,
+    repositoryKey,
+    selectedAnchor,
+    selectedComparisonKey,
+    selectedComparisonPeriods,
+    selectedLogins,
+    selectedRepos,
+    selectionRequestKey,
+  ])
+  const selectedComparison = selectedComparisonResult?.key === selectionRequestKey
+    ? selectedComparisonResult.value
+    : null
+
+  const setComparisonSearch = (anchor: string, periods: string[]) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('compareAnchor', anchor)
+    next.set('comparePeriods', periods.join(','))
+    navigate({ search: `?${next.toString()}` }, { replace: true })
+  }
+
+  const handleComparisonAnchorChange = (anchor: string) => {
+    setComparisonSearch(anchor, defaultComparisonKeys(comparisonSet?.comparisons[anchor]))
+  }
 
   const handleBarClick = (period: string, login: string | undefined) => {
     const next = new URLSearchParams(searchParams)
@@ -102,9 +195,14 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
           </p>
         </div>
         <ComparisonChart
-          comparison={latestComparison}
+          comparisonSet={comparisonSet}
+          selection={selectedComparison}
+          anchorKey={selectedAnchor}
+          comparisonKeys={selectedComparisonPeriods}
           metric={metric}
           filteredByContributors={selectedLogins.length > 0}
+          onAnchorChange={handleComparisonAnchorChange}
+          onComparisonKeysChange={periods => setComparisonSearch(selectedAnchor, periods)}
         />
         <div style={{
           background: '#fff',
