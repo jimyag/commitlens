@@ -6,6 +6,7 @@ import type { MessageKey } from '../i18n/bundles/en'
 import type { ContributorStats } from '../api'
 import type { Granularity } from './TrendChart'
 import { SyncStatusPanel } from './SyncStatusPanel'
+import { SavedViewsPanel } from './SavedViewsPanel'
 
 function navLinkStyle(isActive: boolean): React.CSSProperties {
   return {
@@ -302,6 +303,7 @@ export function Layout() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <SavedViewsPanel />
           <select
             value={lang}
             onChange={e => setLang(e.target.value as Lang)}
