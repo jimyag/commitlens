@@ -42,7 +42,9 @@ func renderTrendView(a *App) string {
 	if a.globalRepoMulti != nil {
 		if len(a.globalRepoMulti) == 1 {
 			for idx := range a.globalRepoMulti {
-				chartTitle = fmt.Sprintf(locale.T("tui.repoPrTrend"), a.repoNames[idx])
+				if idx >= 0 && idx < len(a.repoNames) {
+					chartTitle = fmt.Sprintf(locale.T("tui.repoPrTrend"), a.repoNames[idx])
+				}
 			}
 		} else {
 			chartTitle = fmt.Sprintf(locale.T("tui.mergedNReposFmt"), len(a.globalRepoMulti))
@@ -91,16 +93,19 @@ func renderTrendView(a *App) string {
 		a.trendHScroll = maxOff
 	}
 
-	clip1 := block1
+	chartView := block1
 	if maxOff > 0 {
-		st := trendScrollStatusLine(a.trendHScroll, maxOff, vpW)
-		clip1 = st + "\n" + clipViewHorizontal(block1, a.trendHScroll, vpW)
+		chartView = clipViewHorizontal(block1, a.trendHScroll, vpW)
+	}
+	chartView = a.markZone(zoneTrendChart, chartView)
+	if maxOff > 0 {
+		chartView = trendScrollStatusLine(a.trendHScroll, maxOff, vpW) + "\n" + chartView
 	}
 
 	return strings.Join([]string{
 		granLabel,
 		"",
-		clip1,
+		chartView,
 	}, "\n")
 }
 
@@ -154,16 +159,19 @@ func renderLinesTrendView(a *App) string {
 		a.trendHScroll = maxOff
 	}
 
-	clip := block
+	chartView := block
 	if maxOff > 0 {
-		st := trendScrollStatusLine(a.trendHScroll, maxOff, vpW)
-		clip = st + "\n" + clipViewHorizontal(block, a.trendHScroll, vpW)
+		chartView = clipViewHorizontal(block, a.trendHScroll, vpW)
+	}
+	chartView = a.markZone(zoneTrendChart, chartView)
+	if maxOff > 0 {
+		chartView = trendScrollStatusLine(a.trendHScroll, maxOff, vpW) + "\n" + chartView
 	}
 
 	return strings.Join([]string{
 		granLabel,
 		"",
-		clip,
+		chartView,
 	}, "\n")
 }
 

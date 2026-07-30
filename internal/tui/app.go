@@ -14,6 +14,7 @@ import (
 	"github.com/jimyag/commitlens/internal/locale"
 	"github.com/jimyag/commitlens/internal/stats"
 	isync "github.com/jimyag/commitlens/internal/sync"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 type viewMode int
@@ -26,7 +27,10 @@ const (
 	viewCommitList
 )
 
-type syncDoneMsg struct{ err error }
+type syncDoneMsg struct {
+	err   error
+	stats []*cache.StatsData
+}
 
 type App struct {
 	mode       viewMode
@@ -40,6 +44,7 @@ type App struct {
 	width      int
 	height     int
 	err        error
+	zones      *zone.Manager
 
 	// Global Filters
 	globalFocus         int              // 0=Repo, 1=Granularity, 2=Contributor, 3=ViewContent
@@ -91,6 +96,7 @@ func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Reposito
 		repos:             repos,
 		rawCache:          rawCache,
 		statsCache:        statsCache,
+		zones:             zone.New(),
 		globalFocus:       0,
 		globalGranularity: 0,
 		globalLoginIdx:    0,
@@ -104,9 +110,16 @@ func (a *App) Init() tea.Cmd {
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	a.normalizeState()
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			a.handleMouseClick(msg)
+		}
+	case tea.MouseWheelMsg:
+		a.handleMouseWheel(msg)
 	case tea.KeyPressMsg:
 		if (a.mode == viewTrend || a.mode == viewLinesTrend) && a.trendHScrollKey(msg) {
 			return a, nil
@@ -364,6 +377,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case syncDoneMsg:
 		a.syncing = false
 		a.err = msg.err
+		if msg.err == nil {
+			a.stats = msg.stats
+			a.normalizeState()
+		}
 	}
 	return a, nil
 }
@@ -450,7 +467,7 @@ func (a *App) availableCommitListPeriods() []string {
 
 func (a *App) openCommitListFromTrend() {
 	periods := sortedPeriodKeys(aggregatePeriods(a))
-	if len(periods) == 0 || a.trendPeriodCursor >= len(periods) {
+	if len(periods) == 0 || a.trendPeriodCursor < 0 || a.trendPeriodCursor >= len(periods) {
 		return
 	}
 	period := periods[a.trendPeriodCursor]
@@ -472,9 +489,18 @@ func (a *App) openCommitListFromTrend() {
 
 func (a *App) refreshCommitList() {
 	periods := a.availableCommitListPeriods()
+	if len(periods) == 0 {
+		a.commitListPeriodIdx = 0
+		a.commitList = nil
+		a.commitListCursor = 0
+		return
+	}
+	if a.commitListPeriodIdx < 0 || a.commitListPeriodIdx >= len(periods) {
+		a.commitListPeriodIdx = 0
+	}
 
 	var period string
-	if a.commitListPeriodIdx > 0 && a.commitListPeriodIdx < len(periods) {
+	if a.commitListPeriodIdx > 0 {
 		period = periods[a.commitListPeriodIdx]
 	}
 
@@ -546,8 +572,7 @@ func (a *App) doSync() tea.Cmd {
 				newStats = append(newStats, s)
 			}
 		}
-		a.stats = newStats
-		return syncDoneMsg{err: nil}
+		return syncDoneMsg{stats: newStats}
 	}
 }
 
@@ -591,6 +616,7 @@ func (a *App) trendHScrollKey(msg tea.KeyPressMsg) bool {
 }
 
 func (a *App) View() tea.View {
+	a.normalizeState()
 	header := a.renderHeader()
 	filters := a.renderGlobalFilters()
 	var body string
@@ -606,9 +632,15 @@ func (a *App) View() tea.View {
 	case viewCommitList:
 		body = a.renderCommitList()
 	}
+	body = a.markZone(zoneBody, body)
 	status := a.renderStatus()
-	v := tea.NewView(fmt.Sprintf("%s\n%s\n\n%s\n%s", header, filters, body, status))
+	content := fmt.Sprintf("%s\n%s\n\n%s\n%s", header, filters, body, status)
+	if a.zones != nil {
+		content = a.zones.Scan(content)
+	}
+	v := tea.NewView(content)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
@@ -624,9 +656,9 @@ func (a *App) renderHeader() string {
 	line := ""
 	for i, t := range tabs {
 		if viewMode(i) == a.mode {
-			line += style.Render(t) + " "
+			line += a.markZone(tabZoneID(i), style.Render(t)) + " "
 		} else {
-			line += t + " "
+			line += a.markZone(tabZoneID(i), t) + " "
 		}
 	}
 	return "CommitLens  " + line + locale.T("tui.header.hints")
@@ -649,6 +681,7 @@ func (a *App) renderLinesTrend() string { return renderLinesTrendView(a) }
 
 func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache, statsCache *cache.StatsCache) error {
 	app := New(syncer, stats, repos, rawCache, statsCache)
+	defer app.zones.Close()
 	p := tea.NewProgram(app)
 	_, err := p.Run()
 	return err
@@ -671,6 +704,9 @@ func (a *App) visibleRepoIndices() []int {
 
 	var out []int
 	for i, s := range a.stats {
+		if i >= len(a.repoNames) {
+			break
+		}
 		if len(selectedLogins) == 0 {
 			out = append(out, i)
 			continue
@@ -695,7 +731,9 @@ func (a *App) renderGlobalFilters() string {
 	if a.globalRepoMulti != nil {
 		if len(a.globalRepoMulti) == 1 {
 			for idx := range a.globalRepoMulti {
-				repoVal = a.repoNames[idx]
+				if idx >= 0 && idx < len(a.repoNames) {
+					repoVal = a.repoNames[idx]
+				}
 			}
 		} else {
 			repoVal = fmt.Sprintf(locale.T("tui.scope.multifmt"), len(a.globalRepoMulti))
@@ -705,7 +743,10 @@ func (a *App) renderGlobalFilters() string {
 	if a.globalFocus == 0 {
 		repoStyle = globalFilterBoxActiveStyle
 	}
-	repoFilter := repoStyle.Render(fmt.Sprintf("%s: %s", globalFilterLabelStyle.Render(locale.T("tui.focus.repo")), globalFilterValueStyle.Render(repoVal)))
+	repoFilter := a.markZone(
+		zoneRepoFilter,
+		repoStyle.Render(fmt.Sprintf("%s: %s", globalFilterLabelStyle.Render(locale.T("tui.focus.repo")), globalFilterValueStyle.Render(repoVal))),
+	)
 
 	// Granularity filter
 	granVal := locale.GranularityLabel(a.globalGranularity)
@@ -713,7 +754,16 @@ func (a *App) renderGlobalFilters() string {
 	if a.globalFocus == 1 {
 		granStyle = globalFilterBoxActiveStyle
 	}
-	granFilter := granStyle.Render(fmt.Sprintf("%s: < %s >", globalFilterLabelStyle.Render(locale.T("granularity.period")), globalFilterValueStyle.Render(granVal)))
+	granFilter := a.markZone(
+		zoneGranularityFilter,
+		granStyle.Render(fmt.Sprintf(
+			"%s: %s %s %s",
+			globalFilterLabelStyle.Render(locale.T("granularity.period")),
+			a.markZone(zoneGranularityPrev, "<"),
+			globalFilterValueStyle.Render(granVal),
+			a.markZone(zoneGranularityNext, ">"),
+		)),
+	)
 
 	// Contributor filter
 	loginVal := locale.T("tui.prlist.filterAll")
@@ -730,7 +780,10 @@ func (a *App) renderGlobalFilters() string {
 	if a.globalFocus == 2 {
 		loginStyle = globalFilterBoxActiveStyle
 	}
-	loginFilter := loginStyle.Render(fmt.Sprintf("%s: %s", globalFilterLabelStyle.Render(locale.T("tui.table.contributor")), globalFilterValueStyle.Render(loginVal)))
+	loginFilter := a.markZone(
+		zoneLoginFilter,
+		loginStyle.Render(fmt.Sprintf("%s: %s", globalFilterLabelStyle.Render(locale.T("tui.table.contributor")), globalFilterValueStyle.Render(loginVal))),
+	)
 
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, repoFilter, "  ", granFilter, "  ", loginFilter)
 
@@ -751,29 +804,20 @@ func (a *App) renderGlobalFilters() string {
 			if i == a.globalRepoCursor {
 				line = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + mark + name)
 			}
-			lines = append(lines, line)
+			lines = append(lines, a.markZone(repoOptionZoneID(repoIdx), line))
 		}
 		if len(visible) == 0 {
 			lines = append(lines, "  (No relevant repositories)")
 		}
-		return strings.Join(lines, "\n")
+		return a.markZone(zoneRepoMenu, strings.Join(lines, "\n"))
 	} else if a.globalLoginExpanded && a.globalFocus == 2 {
 		// Append login search list
 		lines := []string{bar, ""}
 		lines = append(lines, fmt.Sprintf("  Search: [ %s_ ]", a.globalLoginSearch))
-		filtered := a.filteredLogins()
+		filtered, start, end := a.visibleLoginOptions()
 		if len(filtered) == 0 {
 			lines = append(lines, "  (No matches)")
 		} else {
-			// Calculate visible range to avoid making the screen too tall
-			start := 0
-			if a.globalLoginCursor >= 10 {
-				start = a.globalLoginCursor - 9
-			}
-			end := start + 10
-			if end > len(filtered) {
-				end = len(filtered)
-			}
 			for i := start; i < end; i++ {
 				l := filtered[i]
 				mark := "[ ] "
@@ -787,13 +831,13 @@ func (a *App) renderGlobalFilters() string {
 				if i == a.globalLoginCursor {
 					line = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render("> " + mark + l)
 				}
-				lines = append(lines, line)
+				lines = append(lines, a.markZone(loginOptionZoneID(i), line))
 			}
 			if end < len(filtered) {
 				lines = append(lines, fmt.Sprintf("  ... and %d more", len(filtered)-end))
 			}
 		}
-		return strings.Join(lines, "\n")
+		return a.markZone(zoneLoginMenu, strings.Join(lines, "\n"))
 	}
 
 	return bar

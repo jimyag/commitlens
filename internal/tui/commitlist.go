@@ -30,14 +30,23 @@ var (
 func (a *App) renderCommitList() string {
 	periods := a.availableCommitListPeriods()
 
-	periodVal := periods[a.commitListPeriodIdx]
+	periodVal := locale.T("tui.prlist.filterAll")
+	if a.commitListPeriodIdx >= 0 && a.commitListPeriodIdx < len(periods) {
+		periodVal = periods[a.commitListPeriodIdx]
+	}
 
 	// Filters
 	periodStyle := commitListFilterBoxStyle
 	if a.commitListFocus == 0 {
 		periodStyle = commitListFilterBoxActiveStyle
 	}
-	periodFilter := periodStyle.Render(fmt.Sprintf("%s: < %s >", commitListFilterLabelStyle.Render(locale.T("granularity.period")), commitListFilterValueStyle.Render(periodVal)))
+	periodFilter := periodStyle.Render(fmt.Sprintf(
+		"%s: %s %s %s",
+		commitListFilterLabelStyle.Render(locale.T("granularity.period")),
+		a.markZone(zoneCommitPeriodPrev, "<"),
+		commitListFilterValueStyle.Render(periodVal),
+		a.markZone(zoneCommitPeriodNext, ">"),
+	))
 
 	header := periodFilter
 	hint := commitListHintStyle.Render(locale.T("tui.prlist.hint"))
@@ -64,20 +73,7 @@ func (a *App) renderCommitList() string {
 	var lines []string
 	lines = append(lines, header, hint, "", tableHeaderLine)
 
-	// Calculate visible range
-	visibleHeight := a.height - 10 // Header, filters, hint, status, etc.
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	start := 0
-	if a.commitListCursor >= visibleHeight {
-		start = a.commitListCursor - visibleHeight + 1
-	}
-	end := start + visibleHeight
-	if end > len(a.commitList) {
-		end = len(a.commitList)
-	}
+	start, end := a.commitListVisibleRange()
 
 	for i := start; i < end; i++ {
 		c := a.commitList[i]
@@ -116,11 +112,13 @@ func (a *App) renderCommitList() string {
 		)
 		row.WriteString(commitListColLinesStyle.Render(linesText))
 
+		var rendered string
 		if i == a.commitListCursor && a.commitListFocus == 1 {
-			lines = append(lines, commitListSelectedStyle.Render("> "+row.String()))
+			rendered = commitListSelectedStyle.Render("> " + row.String())
 		} else {
-			lines = append(lines, "  "+row.String())
+			rendered = "  " + row.String()
 		}
+		lines = append(lines, a.markZone(commitRowZoneID(i), rendered))
 	}
 
 	return strings.Join(lines, "\n")

@@ -25,7 +25,7 @@ func renderRepoView(a *App) string {
 	left := strings.Join(repoList, "\n")
 
 	right := locale.T("tui.reposelect.nodata")
-	if a.repoViewSelected < len(a.stats) {
+	if a.repoViewSelected >= 0 && a.repoViewSelected < len(a.stats) && a.repoViewSelected < len(a.repoNames) {
 		s := a.stats[a.repoViewSelected]
 		contributors := sortedContributors(s.Contributors)
 		right = fmt.Sprintf("%s\n%s", a.repoNames[a.repoViewSelected], renderContributorTable(contributors))
@@ -46,7 +46,11 @@ func renderRepoView(a *App) string {
 		if i < len(rightLines) {
 			r = rightLines[i]
 		}
-		sb.WriteString(fmt.Sprintf("%-30s  %s\n", l, r))
+		line := fmt.Sprintf("%-30s  %s", l, r)
+		if i < len(a.repoNames) {
+			line = a.markZone(repoRowZoneID(i), line)
+		}
+		sb.WriteString(line + "\n")
 	}
 	return sb.String()
 }

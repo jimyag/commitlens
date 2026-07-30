@@ -13,17 +13,17 @@ var bundles = map[Tag]map[string]string{
 		"tui.tab.trend":      "[commit trend]",
 		"tui.tab.trendLines": "[lines trend]",
 		"tui.tab.prlist":     "[commits]",
-		"tui.header.hints":   "        1-5/[]:switch  tab:focus  r:sync  q:quit\nfilters: Enter:expand/select  Space:multi  ←/→:cycle",
+		"tui.header.hints":   "        1-5/[]:switch  tab:focus  r:sync  q:quit\nmouse: click controls/rows  wheel:scroll",
 
 		"tui.status.syncing": "status: syncing...",
 		"tui.status.error":   "error: %s",
 
-		"tui.trend.hint":   "scope: %s  gran: [%s]  ← →\ntab: focus(repo/user/chart)  space in user: toggle  ↑↓\nchart: Enter: list  shift+arrows < > Home End",
+		"tui.trend.hint":   "scope: %s  gran: [%s]  ← →\ntab: focus(repo/user/chart)  space in user: toggle  ↑↓\nchart: click/Enter: list  wheel/shift+arrows: pan",
 		"tui.trend.nodata": "no data, press r to sync",
 
 		"tui.prlist.title":          "commits · %s",
 		"tui.prlist.titleWithLogin": "commits · %s · %s",
-		"tui.prlist.hint":           "        tab: focus  ←/→: filter  ↑/↓: scroll",
+		"tui.prlist.hint":           "        click: select  wheel/↑/↓: scroll  ←/→: filter",
 		"tui.prlist.filterAll":      "all",
 		"tui.prlist.col.repo":       "repo",
 		"tui.prlist.col.pr":         "sha",
@@ -66,6 +66,7 @@ var bundles = map[Tag]map[string]string{
 		"tui.table.commits":     "Commits",
 		"tui.table.added":       "+lines",
 		"tui.table.deleted":     "−lines",
+		"tui.table.activity":    "relative commits",
 		"tui.table.nodata":      "  (no data)",
 
 		"tui.reposelect.noconfig": "no repository configured",
@@ -91,17 +92,17 @@ var bundles = map[Tag]map[string]string{
 		"tui.tab.trend":      "[提交趋势]",
 		"tui.tab.trendLines": "[行数趋势]",
 		"tui.tab.prlist":     "[提交列表]",
-		"tui.header.hints":   "        1-5/[]:切换  tab:切焦点  r:刷新  q:退出\n过滤器: Enter:展开/选择  空格:多选  ←/→:切换",
+		"tui.header.hints":   "        1-5/[]:切换  tab:切焦点  r:刷新  q:退出\n鼠标: 点击控件/列表  滚轮:滚动",
 
 		"tui.status.syncing": "状态: 同步中...",
 		"tui.status.error":   "错误: %s",
 
-		"tui.trend.hint":   "范围: %s  粒度: [%s]  ← →\ntab: 切焦点(仓库/贡献者/柱图)  m: 单仓|多选  空格: 勾选  ↑↓\n柱图: Enter: 提交列表  shift+←/→: 横移  < > Home End",
+		"tui.trend.hint":   "范围: %s  粒度: [%s]  ← →\ntab: 切焦点(仓库/贡献者/柱图)  空格: 勾选  ↑↓\n柱图: 点击/Enter: 提交列表  滚轮/shift+←→: 横移",
 		"tui.trend.nodata": "暂无数据，按 r 刷新",
 
 		"tui.prlist.title":          "提交记录 · %s",
 		"tui.prlist.titleWithLogin": "提交记录 · %s · %s",
-		"tui.prlist.hint":           "        tab: 切焦点  ←/→: 切换筛选  ↑/↓: 滚动表格",
+		"tui.prlist.hint":           "        点击:选择  滚轮/↑/↓:滚动  ←/→:切换筛选",
 		"tui.prlist.filterAll":      "全部",
 		"tui.prlist.col.repo":       "仓库",
 		"tui.prlist.col.pr":         "SHA",
@@ -144,6 +145,7 @@ var bundles = map[Tag]map[string]string{
 		"tui.table.commits":     "提交数",
 		"tui.table.added":       "新增行",
 		"tui.table.deleted":     "删除行",
+		"tui.table.activity":    "相对提交量",
 		"tui.table.nodata":      "  暂无数据",
 
 		"tui.reposelect.noconfig": "无仓库配置",

@@ -64,6 +64,12 @@ userMap:
 - `R`: Force sync/refresh data.
 - `Q`: Quit.
 
+Mouse controls:
+
+- Click tabs, filters, dropdown options, repository rows, and commit rows.
+- Use the wheel to scroll dropdowns and lists, or pan trend charts horizontally.
+- Click a period in a trend chart to open its commit list.
+
 ## Development
 
 ### Requirements

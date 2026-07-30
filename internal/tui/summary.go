@@ -35,7 +35,7 @@ func renderSummaryView(a *App) string {
 	}
 
 	contributors := sortedContributors(merged)
-	return renderContributorTable(contributors)
+	return renderContributorTableWithWidth(contributors, a.width)
 }
 
 func sortedContributors(m map[string]*cache.ContributorStats) []*cache.ContributorStats {
@@ -44,27 +44,53 @@ func sortedContributors(m map[string]*cache.ContributorStats) []*cache.Contribut
 		list = append(list, v)
 	}
 	sort.Slice(list, func(i, j int) bool {
-		return list[i].CommitCount > list[j].CommitCount
+		if list[i].CommitCount != list[j].CommitCount {
+			return list[i].CommitCount > list[j].CommitCount
+		}
+		return list[i].Login < list[j].Login
 	})
 	return list
 }
 
 func renderContributorTable(contributors []*cache.ContributorStats) string {
+	return renderContributorTableWithWidth(contributors, 0)
+}
+
+func renderContributorTableWithWidth(contributors []*cache.ContributorStats, width int) string {
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
-	header := headerStyle.Render(
-		fmt.Sprintf(
-			"%-22s %8s %9s %9s",
-			locale.T("tui.table.contributor"),
-			locale.T("tui.table.commits"),
-			locale.T("tui.table.added"),
-			locale.T("tui.table.deleted"),
-		),
+	baseHeader := fmt.Sprintf(
+		"%-22s %8s %9s %9s",
+		locale.T("tui.table.contributor"),
+		locale.T("tui.table.commits"),
+		locale.T("tui.table.added"),
+		locale.T("tui.table.deleted"),
 	)
-	sep := strings.Repeat("─", 50)
+	barWidth := width - 52
+	showActivity := barWidth >= 16 && len(contributors) > 0
+	header := baseHeader
+	if showActivity {
+		header += "  " + locale.T("tui.table.activity")
+	}
+	header = headerStyle.Render(header)
+
+	tableWidth := 50
+	if showActivity {
+		tableWidth = width
+	}
+	sep := strings.Repeat("─", tableWidth)
 	rows := []string{header, sep}
 
 	addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	activityStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("33"))
+	activityTrackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+
+	maxCommits := 0
+	for _, contributor := range contributors {
+		if contributor.CommitCount > maxCommits {
+			maxCommits = contributor.CommitCount
+		}
+	}
 
 	for _, c := range contributors {
 		row := fmt.Sprintf(
@@ -74,6 +100,19 @@ func renderContributorTable(contributors []*cache.ContributorStats) string {
 			addStyle.Render(fmt.Sprintf("%+9d", c.Additions)),
 			delStyle.Render(fmt.Sprintf("%+9d", -c.Deletions)),
 		)
+		if showActivity {
+			filled := 0
+			if maxCommits > 0 {
+				filled = c.CommitCount * barWidth / maxCommits
+			}
+			filled = clamp(filled, 0, barWidth)
+			if c.CommitCount > 0 && filled == 0 {
+				filled = 1
+			}
+			row += "  " +
+				activityStyle.Render(strings.Repeat("█", filled)) +
+				activityTrackStyle.Render(strings.Repeat("░", barWidth-filled))
+		}
 		rows = append(rows, row)
 	}
 	if len(contributors) == 0 {
