@@ -4,7 +4,16 @@ github:
 # UI language: en, zh, or leave empty to use COMMITLENS_LANG / system LANG
 language: ""
 
+reporting:
+  # IANA timezone used for day/week/month/quarter/year boundaries.
+  # "Local" uses the machine timezone.
+  timezone: Local
+
 repositories:
+  # Web mode: discover repositories from an organization, then select which
+  # repositories to synchronize from the repository dropdown.
+  - owner: example-org
+  # Exact repositories remain part of the default synchronization set.
   - owner: jimyag
     repo: commitlens
   - owner: jimyag

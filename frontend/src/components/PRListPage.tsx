@@ -43,7 +43,10 @@ export function PRListPage() {
   const navigate = useNavigate()
   const { t, tf } = useI18n()
 
-  const repo = searchParams.get('repo') || ''
+  const selectedRepos = useMemo(() => {
+    const val = searchParams.get('repo')
+    return val ? val.split(',').filter(Boolean) : []
+  }, [searchParams])
   const gran = (searchParams.get('gran') || 'week') as Granularity
   const period = searchParams.get('period') || ''
   const selectedLogins = useMemo(() => {
@@ -57,7 +60,7 @@ export function PRListPage() {
   const [page, setPage] = useState(1)
 
   // Reset page to 1 when any filter (except page itself) changes
-  const filterKey = `${period}|${gran}|${repo}|${selectedLogins.join(',')}`
+  const filterKey = `${period}|${gran}|${selectedRepos.join(',')}|${selectedLogins.join(',')}`
   const prevFilterKey = useRef(filterKey)
 
   useEffect(() => {
@@ -74,7 +77,7 @@ export function PRListPage() {
       if (!ignore) setLoading(true)
     })
     const params: { repo?: string; from?: string; to?: string; login?: string; page?: number; per_page?: number } = {
-      repo: repo || undefined,
+      repo: selectedRepos.length > 0 ? selectedRepos.join(',') : undefined,
       login: selectedLogins.length > 0 ? selectedLogins.join(',') : undefined,
       page,
       per_page: PER_PAGE,
@@ -94,13 +97,15 @@ export function PRListPage() {
       })
       .catch(() => {
         if (!ignore) setLoading(false)
-      })
+    })
     return () => { ignore = true }
-  }, [filterKey, page, gran, period, repo, selectedLogins])
+  }, [filterKey, page, gran, period, selectedRepos, selectedLogins])
 
   // 从 stats 数据推导当前 gran + repo 下所有可用 period
   const availablePeriods = useMemo(() => {
-    const statsToUse = repo ? allStats.filter(s => s.repo === repo) : allStats
+    const statsToUse = selectedRepos.length > 0
+      ? allStats.filter(s => selectedRepos.includes(s.repo))
+      : allStats
     const set = new Set<string>()
     for (const s of statsToUse) {
       for (const wk of Object.keys(s.weekly ?? {})) {
@@ -108,9 +113,9 @@ export function PRListPage() {
       }
     }
     return Array.from(set).sort().reverse()
-  }, [allStats, repo, gran])
+  }, [allStats, selectedRepos, gran])
 
-  const multiRepo = useMemo(() => new Set(commits.map(c => c.repo)).size > 1, [commits])
+  const multiRepo = selectedRepos.length > 1 || new Set(commits.map(c => c.repo)).size > 1
   const totalPages = Math.ceil(total / PER_PAGE)
 
   const patch = (key: string, value: string) => {
@@ -194,7 +199,7 @@ export function PRListPage() {
             </thead>
             <tbody>
               {commits.map(c => (
-                <tr key={c.sha} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr key={`${c.repo}:${c.sha}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   {multiRepo && <td style={tdStyle}>{c.repo}</td>}
                   <td style={tdStyle}>
                     <code style={{ color: '#4f46e5', fontWeight: 600 }}>{c.sha.slice(0, 7)}</code>

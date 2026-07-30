@@ -40,6 +40,7 @@ type App struct {
 	rawCache   *cache.RawCache
 	statsCache *cache.StatsCache
 	syncer     *isync.Syncer
+	location   *time.Location
 	syncing    bool
 	width      int
 	height     int
@@ -84,13 +85,24 @@ type commitItem struct {
 	Deletions    int
 }
 
-func New(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache, statsCache *cache.StatsCache) *App {
+func New(
+	syncer *isync.Syncer,
+	stats []*cache.StatsData,
+	repos []config.Repository,
+	rawCache *cache.RawCache,
+	statsCache *cache.StatsCache,
+	location *time.Location,
+) *App {
+	if location == nil {
+		location = time.Local
+	}
 	repoNames := make([]string, len(repos))
 	for i, r := range repos {
 		repoNames[i] = r.ID()
 	}
 	return &App{
 		syncer:            syncer,
+		location:          location,
 		stats:             stats,
 		repoNames:         repoNames,
 		repos:             repos,
@@ -679,8 +691,15 @@ func (a *App) renderRepo() string       { return renderRepoView(a) }
 func (a *App) renderTrend() string      { return renderTrendView(a) }
 func (a *App) renderLinesTrend() string { return renderLinesTrendView(a) }
 
-func Run(syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache, statsCache *cache.StatsCache) error {
-	app := New(syncer, stats, repos, rawCache, statsCache)
+func Run(
+	syncer *isync.Syncer,
+	stats []*cache.StatsData,
+	repos []config.Repository,
+	rawCache *cache.RawCache,
+	statsCache *cache.StatsCache,
+	location *time.Location,
+) error {
+	app := New(syncer, stats, repos, rawCache, statsCache, location)
 	defer app.zones.Close()
 	p := tea.NewProgram(app)
 	_, err := p.Run()

@@ -13,28 +13,40 @@ import (
 )
 
 type Server struct {
-	engine     *gin.Engine
-	syncer     *isync.Syncer
-	stats      []*cache.StatsData
-	repoNames  []string
-	repos      []config.Repository
-	rawCache   *cache.RawCache
-	frontendFS http.FileSystem
+	engine       *gin.Engine
+	syncer       *isync.Syncer
+	repoNames    []string
+	repos        []config.Repository
+	defaultRepos []config.Repository
+	cfg          *config.Config
+	rawCache     *cache.RawCache
+	statsCache   *cache.StatsCache
+	frontendFS   http.FileSystem
 }
 
-func New(assets embed.FS, syncer *isync.Syncer, stats []*cache.StatsData, repos []config.Repository, rawCache *cache.RawCache) *Server {
+func New(
+	assets embed.FS,
+	syncer *isync.Syncer,
+	repos []config.Repository,
+	defaultRepos []config.Repository,
+	cfg *config.Config,
+	rawCache *cache.RawCache,
+	statsCache *cache.StatsCache,
+) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	repoNames := make([]string, len(repos))
 	for i, r := range repos {
 		repoNames[i] = r.ID()
 	}
 	s := &Server{
-		engine:    gin.New(),
-		syncer:    syncer,
-		stats:     stats,
-		repoNames: repoNames,
-		repos:     repos,
-		rawCache:  rawCache,
+		engine:       gin.New(),
+		syncer:       syncer,
+		repoNames:    repoNames,
+		repos:        repos,
+		defaultRepos: defaultRepos,
+		cfg:          cfg,
+		rawCache:     rawCache,
+		statsCache:   statsCache,
 	}
 	s.mountFrontend(assets)
 	s.registerAPI()

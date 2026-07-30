@@ -11,6 +11,7 @@
 - **贡献趋势分析**：
   - **提交量趋势**：直观展示历史活跃度。
   - **代码行数趋势**：通过堆叠柱状图追踪代码产出与重构力度（新增/删除行）。
+  - **周期比较**：同时对比上一周期和最多三个历史同期。
 - **交互式 TUI**：由 `bubbletea` 驱动的极速、全键盘操作终端界面。
 - **现代化 Web UI**：基于 React + ECharts 的响应式界面，支持搜索、滚动和高密度数据展示。
 - **多作者识别**：基于 `Co-authored-by` 准确计算所有贡献者的功劳。
@@ -40,10 +41,22 @@
 discoveryRoots:
   - ~/src/github.com/kubernetes  # 自动扫描此目录下所有 git 仓库
 repositories:
-  - url: https://github.com/kubeovn/kube-ovn.git # 远程仓库
+  - owner: example-org           # Web：发现组织仓库，再选择需要同步的仓库
+  - owner: example-org
+    repo: example-repo           # 精确远程仓库，默认参与同步
 userMap:
   "Jim Yang": ["jimyag", "yang.jim@example.com"] # 将多个别名映射到同一个自然人
+reporting:
+  timezone: Local                # 也可以使用 Asia/Taipei 等 IANA 时区
 ```
+
+只配置 `owner` 时，该条目作为 Web 仓库发现源。CommitLens 会列出当前
+GitHub token 有权访问的组织仓库，但不会自动同步整个组织。在 Web 的仓库
+下拉框中勾选仓库后点击“刷新”即可同步。原有的 `owner` + `repo` 精确配置和
+本地目录发现仓库仍保持默认同步行为。
+
+Web 和 TUI 的提交趋势、代码行趋势都会展示周期比较图。周粒度会比较前几个月
+相同月内周次，月和季度会比较往年同期；当前尚未结束的周期按相同进度比较。
 
 ### 使用
 ```bash

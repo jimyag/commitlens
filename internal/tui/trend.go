@@ -17,7 +17,7 @@ import (
 )
 
 func renderTrendView(a *App) string {
-	granLabel := locale.T("tui.trend.hint")
+	granLabel := renderTrendHint(a)
 
 	periodData := aggregatePeriods(a)
 	periods := sortedPeriodKeys(periodData)
@@ -64,6 +64,11 @@ func renderTrendView(a *App) string {
 		selIdx = a.trendPeriodCursor
 	}
 	totalCommitsChart := renderBarChart(periods, totalCommitsValues, chartWidth, 12, false, selIdx, a.globalGranularity)
+	comparisonIdx := len(periods) - 1
+	if a.globalFocus == 3 && a.trendPeriodCursor >= 0 && a.trendPeriodCursor < len(periods) {
+		comparisonIdx = a.trendPeriodCursor
+	}
+	comparisonBlock := renderComparisonBlock(a, periods[comparisonIdx], false)
 
 	// 如果选中了具体贡献者，显示该贡献者的趋势
 	var personBlock string
@@ -105,12 +110,14 @@ func renderTrendView(a *App) string {
 	return strings.Join([]string{
 		granLabel,
 		"",
+		comparisonBlock,
+		"",
 		chartView,
 	}, "\n")
 }
 
 func renderLinesTrendView(a *App) string {
-	granLabel := locale.T("tui.trend.hint")
+	granLabel := renderTrendHint(a)
 
 	periodData := aggregatePeriodsLines(a)
 	periods := sortedPeriodKeysLines(periodData)
@@ -131,6 +138,10 @@ func renderLinesTrendView(a *App) string {
 
 	titleAdd := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true).Render(locale.T("tui.trend.linesAdd"))
 	titleDel := lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render(locale.T("tui.trend.linesDel"))
+	if len(a.globalLoginMulti) > 0 {
+		titleAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true).Render(locale.T("tui.trend.linesAddSelected"))
+		titleDel = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render(locale.T("tui.trend.linesDelSelected"))
+	}
 
 	addValues := make([]float64, len(periods))
 	delValues := make([]float64, len(periods))
@@ -152,6 +163,11 @@ func renderLinesTrendView(a *App) string {
 	barValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("9"))
 	delChart := renderBarChart(periods, delValues, chartWidth, 10, false, selIdx, a.globalGranularity)
 	barValueStyle = oldStyle
+	comparisonIdx := len(periods) - 1
+	if a.globalFocus == 3 && a.trendPeriodCursor >= 0 && a.trendPeriodCursor < len(periods) {
+		comparisonIdx = a.trendPeriodCursor
+	}
+	comparisonBlock := renderComparisonBlock(a, periods[comparisonIdx], true)
 
 	block := titleAdd + "\n" + addChart + "\n\n" + titleDel + "\n" + delChart
 	maxOff := trendHScrollMaxForBlock(block, vpW)
@@ -171,8 +187,150 @@ func renderLinesTrendView(a *App) string {
 	return strings.Join([]string{
 		granLabel,
 		"",
+		comparisonBlock,
+		"",
 		chartView,
 	}, "\n")
+}
+
+func renderTrendHint(a *App) string {
+	scope := locale.T("tui.prlist.filterAll")
+	if a.globalRepoMulti != nil {
+		if len(a.globalRepoMulti) == 1 {
+			for idx := range a.globalRepoMulti {
+				if idx >= 0 && idx < len(a.repoNames) {
+					scope = a.repoNames[idx]
+				}
+			}
+		} else {
+			scope = fmt.Sprintf(locale.T("tui.scope.multifmt"), len(a.globalRepoMulti))
+		}
+	}
+	return fmt.Sprintf(locale.T("tui.trend.hint"), scope, locale.GranularityLabel(a.globalGranularity))
+}
+
+func renderComparisonBlock(a *App, anchor string, lines bool) string {
+	logins := make([]string, 0, len(a.globalLoginMulti))
+	for login := range a.globalLoginMulti {
+		logins = append(logins, login)
+	}
+	sort.Strings(logins)
+
+	comparison := stats.ComparePeriod(trendFilteredStats(a), stats.ComparisonOptions{
+		Granularity: comparisonGranularity(a.globalGranularity),
+		Logins:      logins,
+		Location:    a.location,
+	}, anchor)
+	if !comparison.Anchor.Available {
+		return ""
+	}
+
+	type labeledPoint struct {
+		relation string
+		point    stats.ComparisonPoint
+	}
+	points := []labeledPoint{
+		{relation: "C", point: comparison.Anchor},
+		{relation: "P", point: comparison.Previous},
+	}
+	for i, point := range comparison.Historical {
+		points = append(points, labeledPoint{relation: fmt.Sprintf("S%d", i+1), point: point})
+	}
+
+	title := fmt.Sprintf(locale.T("tui.comparison.title"), comparison.Anchor.Label)
+	legend := locale.T("tui.comparison.legend")
+	if !comparison.Anchor.Complete {
+		legend += " · " + locale.T("tui.comparison.inProgress")
+	}
+	rows := []string{title, legend}
+
+	if lines {
+		maxAdd, maxDel := 0, 0
+		for _, item := range points {
+			if !item.point.Available {
+				continue
+			}
+			maxAdd = max(maxAdd, item.point.Metrics.Additions)
+			maxDel = max(maxDel, item.point.Metrics.Deletions)
+		}
+		barWidth := clamp((a.width-54)/2, 4, 18)
+		for _, item := range points {
+			rows = append(rows, renderComparisonLinesRow(item.relation, item.point, maxAdd, maxDel, barWidth))
+		}
+		return strings.Join(rows, "\n")
+	}
+
+	maxCommits := 0
+	for _, item := range points {
+		if item.point.Available {
+			maxCommits = max(maxCommits, item.point.Metrics.Commits)
+		}
+	}
+	barWidth := clamp(a.width-38, 6, 32)
+	for _, item := range points {
+		rows = append(rows, renderComparisonCommitRow(item.relation, item.point, maxCommits, barWidth))
+	}
+	return strings.Join(rows, "\n")
+}
+
+func renderComparisonCommitRow(relation string, point stats.ComparisonPoint, maxValue, barWidth int) string {
+	label := truncateComparisonLabel(point.Label, 16)
+	if !point.Available {
+		return fmt.Sprintf("%-2s %-16s %8s", relation, label, "—")
+	}
+	bar := comparisonBar(point.Metrics.Commits, maxValue, barWidth, barValueStyleSelected)
+	return fmt.Sprintf("%-2s %-16s %8d %s", relation, label, point.Metrics.Commits, bar)
+}
+
+func renderComparisonLinesRow(relation string, point stats.ComparisonPoint, maxAdd, maxDel, barWidth int) string {
+	label := truncateComparisonLabel(point.Label, 14)
+	if !point.Available {
+		return fmt.Sprintf("%-2s %-14s %8s", relation, label, "—")
+	}
+	addBar := comparisonBar(point.Metrics.Additions, maxAdd, barWidth, barValueStylePerson)
+	delBar := comparisonBar(point.Metrics.Deletions, maxDel, barWidth, barValueStyle)
+	return fmt.Sprintf(
+		"%-2s %-14s +%7d %s  -%7d %s",
+		relation,
+		label,
+		point.Metrics.Additions,
+		addBar,
+		point.Metrics.Deletions,
+		delBar,
+	)
+}
+
+func comparisonBar(value, maxValue, width int, style lipgloss.Style) string {
+	if width <= 0 || maxValue <= 0 || value <= 0 {
+		return strings.Repeat(" ", max(width, 0))
+	}
+	filled := int(math.Round(float64(value) / float64(maxValue) * float64(width)))
+	filled = clamp(filled, 1, width)
+	return style.Render(strings.Repeat("█", filled)) + strings.Repeat(" ", width-filled)
+}
+
+func truncateComparisonLabel(label string, width int) string {
+	runes := []rune(label)
+	if len(runes) <= width {
+		return label
+	}
+	if width <= 1 {
+		return string(runes[:width])
+	}
+	return string(runes[:width-1]) + "…"
+}
+
+func comparisonGranularity(value int) stats.Granularity {
+	switch value {
+	case 1:
+		return stats.GranularityMonth
+	case 2:
+		return stats.GranularityQuarter
+	case 3:
+		return stats.GranularityYear
+	default:
+		return stats.GranularityWeek
+	}
 }
 
 type periodEntryLines struct {
@@ -188,8 +346,19 @@ func aggregatePeriodsLines(a *App) map[string]*periodEntryLines {
 			if _, ok := result[period]; !ok {
 				result[period] = &periodEntryLines{}
 			}
-			result[period].additions += w.TotalAdditions
-			result[period].deletions += w.TotalDeletions
+			if len(a.globalLoginMulti) == 0 {
+				result[period].additions += w.TotalAdditions
+				result[period].deletions += w.TotalDeletions
+				continue
+			}
+			for login := range a.globalLoginMulti {
+				contributor := w.Contributors[login]
+				if contributor == nil {
+					continue
+				}
+				result[period].additions += contributor.Additions
+				result[period].deletions += contributor.Deletions
+			}
 		}
 	}
 	return result

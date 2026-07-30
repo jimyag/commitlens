@@ -20,7 +20,14 @@ function navLinkStyle(isActive: boolean): React.CSSProperties {
 }
 
 export function Layout() {
-  const { repos: allRepoIDs, allStats, allContributors, syncing, syncRepo } = useApp()
+  const {
+    repos: allRepoIDs,
+    defaultSyncRepos,
+    allStats,
+    allContributors,
+    syncing,
+    syncRepositories,
+  } = useApp()
   const { lang, setLang, t, tf } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -35,6 +42,7 @@ export function Layout() {
   }, [searchParams])
 
   const gran = (searchParams.get('gran') ?? 'week') as Granularity
+  const canSync = selectedRepos.length > 0 || defaultSyncRepos.length > 0
 
   const [repoOpen, setRepoOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
@@ -251,15 +259,20 @@ export function Layout() {
           </div>
 
           <button
-            onClick={() => syncRepo()}
-            disabled={syncing}
+            onClick={() => syncRepositories(selectedRepos.length > 0 ? selectedRepos : undefined)}
+            disabled={syncing || !canSync}
             style={{
               padding: '6px 14px', borderRadius: 8, background: '#4f46e5', color: '#fff',
-              border: 'none', fontSize: 13, fontWeight: 600, cursor: syncing ? 'wait' : 'pointer',
-              opacity: syncing ? 0.7 : 1,
+              border: 'none', fontSize: 13, fontWeight: 600,
+              cursor: syncing ? 'wait' : canSync ? 'pointer' : 'not-allowed',
+              opacity: syncing || !canSync ? 0.5 : 1,
             }}
           >
-            {syncing ? t('app.syncing') : t('app.refresh')}
+            {syncing
+              ? t('app.syncing')
+              : !canSync
+                ? t('app.selectReposToSync')
+                : t('app.refresh')}
           </button>
         </div>
 

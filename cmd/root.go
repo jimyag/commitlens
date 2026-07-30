@@ -8,7 +8,7 @@ import (
 
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
-	"github.com/jimyag/commitlens/internal/git"
+	ghapi "github.com/jimyag/commitlens/internal/github"
 	"github.com/jimyag/commitlens/internal/locale"
 	"github.com/jimyag/commitlens/internal/stats"
 	isync "github.com/jimyag/commitlens/internal/sync"
@@ -55,7 +55,7 @@ func run(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "config file not found: %s\n\ncreate a config file, for example:\n\nrepositories:\n  - local_path: /path/to/my/repo\n  - owner: your-org\n    repo: your-repo\n", cfgPath)
+			fmt.Fprintf(os.Stderr, "config file not found: %s\n\ncreate a config file, for example:\n\nrepositories:\n  - local_path: /path/to/my/repo\n  - owner: your-org\n    repo: your-repo\n  - owner: another-org  # Web: select repositories before syncing\n", cfgPath)
 			os.Exit(1)
 		}
 		return err
@@ -65,35 +65,25 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create cache directory: %w", err)
 	}
 	locale.Init(cfg.Language)
+	cfg.GitHub.Token = ghapi.ResolveToken(cfg.GitHub.Token)
 
 	rawCache := cache.NewRawCache(cfg.Cache.Dir)
 	statsCache := cache.NewStatsCache(cfg.Cache.Dir)
 	syncer := isync.New(cfg, rawCache, statsCache)
 
-	repos := cfg.Repositories
-	// Discovery
-	if len(cfg.DiscoveryRoots) > 0 {
-		discovered, err := git.Discover(cfg.DiscoveryRoots)
-		if err != nil {
-			return fmt.Errorf("discovery failed: %w", err)
-		}
-		repos = append(repos, discovered...)
+	repositorySet, err := resolveRepositories(cmd.Context(), cfg, webMode)
+	if err != nil {
+		return err
 	}
-
-	// Deduplicate by ID
-	uniqueRepos := make([]config.Repository, 0, len(repos))
-	seenIDs := make(map[string]struct{})
-	for _, r := range repos {
-		id := r.ID()
-		if _, ok := seenIDs[id]; !ok {
-			seenIDs[id] = struct{}{}
-			uniqueRepos = append(uniqueRepos, r)
-		}
+	repos := repositorySet.available
+	startupRepos := repositorySet.startup
+	startupRepoIDs := make(map[string]struct{}, len(startupRepos))
+	for _, repo := range startupRepos {
+		startupRepoIDs[repo.ID()] = struct{}{}
 	}
-	repos = uniqueRepos
 
 	var allStats []*cache.StatsData
-	hasRawCache := false
+	hasStartupRawCache := false
 	for _, repo := range repos {
 		repoID := repo.ID()
 		raw, err := rawCache.Load(repoID)
@@ -102,15 +92,18 @@ func run(cmd *cobra.Command, args []string) error {
 			s := stats.Aggregate(raw, cfg)
 			_ = statsCache.Save(s)
 			allStats = append(allStats, s)
-			hasRawCache = true
+			if _, ok := startupRepoIDs[repoID]; ok {
+				hasStartupRawCache = true
+			}
 		} else {
 			allStats = append(allStats, &cache.StatsData{Repo: repoID})
 		}
 	}
 
-	// Only run blocking sync UI if we have no raw cached data at all.
-	if !hasRawCache {
-		runSync(cmd.Context(), syncer, repos)
+	// Organization repositories are selectable in Web mode and are never
+	// synchronized automatically on startup.
+	if len(startupRepos) > 0 && !hasStartupRawCache {
+		runSync(cmd.Context(), syncer, startupRepos)
 		// Reload and aggregate after sync
 		allStats = nil
 		for _, repo := range repos {
@@ -128,11 +121,12 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		addr := fmt.Sprintf(":%d", port)
 		fmt.Printf("CommitLens web UI: http://localhost%s\n", addr)
-		srv := web.New(globalAssets, syncer, allStats, repos, rawCache)
+		srv := web.New(globalAssets, syncer, repos, startupRepos, cfg, rawCache, statsCache)
 		return srv.Run(addr)
 	}
 
-	return tui.Run(syncer, allStats, repos, rawCache, statsCache)
+	reportingLocation, _ := cfg.ReportingLocation()
+	return tui.Run(syncer, allStats, repos, rawCache, statsCache, reportingLocation)
 }
 
 // runSync launches a bubbletea progress UI while syncing all repos concurrently.

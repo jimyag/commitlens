@@ -5,10 +5,13 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
+	"github.com/jimyag/commitlens/internal/stats"
 )
 
 func (s *Server) registerAPI() {
@@ -16,47 +19,157 @@ func (s *Server) registerAPI() {
 	api.GET("/stats", s.handleGetStats)
 	api.GET("/repos", s.handleGetRepos)
 	api.GET("/commits", s.handleGetCommits) // Renamed from /prs
+	api.GET("/comparison", s.handleGetComparison)
 	api.POST("/sync", s.handleSync)
 }
 
 func (s *Server) handleGetStats(c *gin.Context) {
 	repo := c.Query("repo")
 	if repo == "" {
-		c.JSON(http.StatusOK, gin.H{"stats": s.stats})
+		values := make([]statsResponse, 0, len(s.repoNames))
+		for _, repoID := range s.repoNames {
+			value, err := s.statsCache.Load(repoID)
+			if err == nil {
+				values = append(values, newStatsResponse(value))
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"stats": values})
 		return
 	}
-	for _, st := range s.stats {
-		if st.Repo == repo {
-			c.JSON(http.StatusOK, st)
+	for _, repoID := range s.repoNames {
+		if repoID == repo {
+			value, err := s.statsCache.Load(repoID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, newStatsResponse(value))
 			return
 		}
 	}
 	c.JSON(http.StatusNotFound, gin.H{"error": "repo not found"})
 }
 
+type statsResponse struct {
+	Repo         string                             `json:"repo"`
+	ComputedAt   time.Time                          `json:"computed_at"`
+	Contributors map[string]*cache.ContributorStats `json:"contributors"`
+	Weekly       map[string]*cache.WeeklyEntry      `json:"weekly"`
+}
+
+func newStatsResponse(value *cache.StatsData) statsResponse {
+	return statsResponse{
+		Repo:         value.Repo,
+		ComputedAt:   value.ComputedAt,
+		Contributors: value.Contributors,
+		Weekly:       value.Weekly,
+	}
+}
+
 func (s *Server) handleGetRepos(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"repos": s.repoNames})
+	defaultRepositories := make([]string, len(s.defaultRepos))
+	for i, repository := range s.defaultRepos {
+		defaultRepositories[i] = repository.ID()
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"repos":                s.repoNames,
+		"default_repositories": defaultRepositories,
+	})
+}
+
+func (s *Server) handleGetComparison(c *gin.Context) {
+	granularity := stats.Granularity(c.DefaultQuery("gran", string(stats.GranularityWeek)))
+	switch granularity {
+	case stats.GranularityWeek, stats.GranularityMonth, stats.GranularityQuarter, stats.GranularityYear:
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid granularity"})
+		return
+	}
+
+	repositories := queryList(c, "repo")
+	if len(repositories) == 0 {
+		repositories = s.repoNames
+	}
+	data := make([]*cache.StatsData, 0, len(repositories))
+	for _, repository := range repositories {
+		value, err := s.statsCache.Load(repository)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		data = append(data, value)
+	}
+
+	location := time.Local
+	if s.cfg != nil {
+		configured, err := s.cfg.ReportingLocation()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		location = configured
+	}
+	result := stats.BuildComparisons(data, stats.ComparisonOptions{
+		Granularity: granularity,
+		Logins:      queryList(c, "login"),
+		Location:    location,
+	})
+	c.JSON(http.StatusOK, result)
+}
+
+type syncRequest struct {
+	Repositories []string `json:"repositories"`
 }
 
 func (s *Server) handleSync(c *gin.Context) {
 	repoID := c.Query("repo")
-	go func() {
-		if repoID != "" {
-			var target *config.Repository
-			for _, r := range s.repos {
-				if r.ID() == repoID {
-					target = &r
-					break
-				}
-			}
-			if target != nil {
-				_ = s.syncer.SyncRepo(context.Background(), *target)
-			}
-		} else {
-			s.syncer.SyncAll(context.Background(), s.repos, nil, 5)
+	request := syncRequest{}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sync request"})
+			return
 		}
-	}()
-	c.JSON(http.StatusAccepted, gin.H{"message": "sync started"})
+	}
+	if repoID != "" {
+		request.Repositories = []string{repoID}
+	}
+
+	targets := s.defaultRepos
+	if len(request.Repositories) > 0 {
+		available := make(map[string]config.Repository, len(s.repos))
+		for _, repository := range s.repos {
+			available[repository.ID()] = repository
+		}
+
+		targets = make([]config.Repository, 0, len(request.Repositories))
+		seen := make(map[string]struct{}, len(request.Repositories))
+		for _, id := range request.Repositories {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			repository, ok := available[id]
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "unknown repository: " + id})
+				return
+			}
+			seen[id] = struct{}{}
+			targets = append(targets, repository)
+		}
+	}
+	if len(targets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "select at least one repository"})
+		return
+	}
+
+	if errors := s.syncer.SyncAll(context.Background(), targets, nil, 5); len(errors) > 0 {
+		messages := make([]string, len(errors))
+		for i, err := range errors {
+			messages[i] = err.Error()
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": strings.Join(messages, "; ")})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "sync completed"})
 }
 
 // CommitInfo 是对外暴露的提交摘要。
@@ -72,8 +185,8 @@ type CommitInfo struct {
 }
 
 func (s *Server) handleGetCommits(c *gin.Context) {
-	repo := c.Query("repo")   // 可选；空 = 全部仓库
-	login := c.Query("login") // 可选；空 = 不按贡献者过滤
+	selectedRepos := queryList(c, "repo")
+	selectedLogins := queryList(c, "login")
 	fromStr := c.Query("from")
 	toStr := c.Query("to")
 
@@ -97,8 +210,12 @@ func (s *Server) handleGetCommits(c *gin.Context) {
 	}
 
 	repos := s.repoNames
-	if repo != "" {
-		repos = []string{repo}
+	if len(selectedRepos) > 0 {
+		repos = selectedRepos
+	}
+	logins := make(map[string]struct{}, len(selectedLogins))
+	for _, login := range selectedLogins {
+		logins[login] = struct{}{}
 	}
 
 	var result []CommitInfo
@@ -114,14 +231,14 @@ func (s *Server) handleGetCommits(c *gin.Context) {
 			if hasTo && !commit.Date.Before(to) {
 				continue
 			}
-			if login != "" {
+			if len(logins) > 0 {
 				found := false
 				parts := commit.Participants
 				if len(parts) == 0 {
 					parts = []string{commit.Author}
 				}
 				for _, p := range parts {
-					if p == login {
+					if _, ok := logins[p]; ok {
 						found = true
 						break
 					}
@@ -150,6 +267,12 @@ func (s *Server) handleGetCommits(c *gin.Context) {
 	}
 
 	sort.Slice(result, func(i, j int) bool {
+		if result[i].Date.Equal(result[j].Date) {
+			if result[i].Repo == result[j].Repo {
+				return result[i].SHA < result[j].SHA
+			}
+			return result[i].Repo < result[j].Repo
+		}
 		return result[i].Date.After(result[j].Date)
 	})
 
@@ -179,4 +302,23 @@ func (s *Server) handleGetCommits(c *gin.Context) {
 		"page":     page,
 		"per_page": perPage,
 	})
+}
+
+func queryList(c *gin.Context, key string) []string {
+	var result []string
+	seen := make(map[string]struct{})
+	for _, value := range c.QueryArray(key) {
+		for _, item := range strings.Split(value, ",") {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if _, ok := seen[item]; ok {
+				continue
+			}
+			seen[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
 }

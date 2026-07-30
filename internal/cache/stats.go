@@ -32,6 +32,7 @@ type StatsData struct {
 	Repo         string                       `json:"repo"`
 	ComputedAt   time.Time                    `json:"computed_at"`
 	Contributors map[string]*ContributorStats `json:"contributors"`
+	Daily        map[string]*WeeklyEntry      `json:"daily,omitempty"`
 	Weekly       map[string]*WeeklyEntry      `json:"weekly"`
 }
 
@@ -53,6 +54,7 @@ func (c *StatsCache) Load(repo string) (*StatsData, error) {
 		return &StatsData{
 			Repo:         repo,
 			Contributors: make(map[string]*ContributorStats),
+			Daily:        make(map[string]*WeeklyEntry),
 			Weekly:       make(map[string]*WeeklyEntry),
 		}, nil
 	}

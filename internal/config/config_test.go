@@ -35,3 +35,34 @@ repositories:
 		t.Errorf("expected default port 8080, got %d", cfg.Web.Port)
 	}
 }
+
+func TestRepositoryKinds(t *testing.T) {
+	organization := config.Repository{Owner: "example-org"}
+	if !organization.IsOrganization() || organization.IsSyncable() {
+		t.Fatalf("owner-only entry should be an organization: %#v", organization)
+	}
+
+	remote := config.Repository{Owner: "example-org", Repo: "example-repo"}
+	if remote.IsOrganization() || !remote.IsSyncable() {
+		t.Fatalf("owner/repo entry should be syncable: %#v", remote)
+	}
+
+	local := config.Repository{LocalPath: "/tmp/las"}
+	if local.IsOrganization() || !local.IsSyncable() {
+		t.Fatalf("local_path entry should be syncable: %#v", local)
+	}
+}
+
+func TestLoadRejectsInvalidReportingTimezone(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	content := `
+reporting:
+  timezone: Not/A_Timezone
+`
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if _, err := config.Load(cfgPath); err == nil {
+		t.Fatal("expected invalid reporting timezone error")
+	}
+}

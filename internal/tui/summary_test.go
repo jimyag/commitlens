@@ -30,7 +30,7 @@ func TestSortedContributorsUsesLoginToBreakCommitCountTies(t *testing.T) {
 }
 
 func TestRefreshCommitListResetsUnavailablePeriod(t *testing.T) {
-	app := New(nil, nil, nil, nil, nil)
+	app := New(nil, nil, nil, nil, nil, nil)
 	defer app.zones.Close()
 	app.mode = viewCommitList
 	app.commitListPeriodIdx = 15

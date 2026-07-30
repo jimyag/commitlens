@@ -9,7 +9,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import ReactEChartsCore from 'echarts-for-react/esm/core'
 import type { MessageKey } from '../i18n/bundles/en'
 import { useI18n } from '../i18n/I18nContext'
-import type { ContributorStats, WeeklyEntry } from '../api'
+import type { ContributorStats, PeriodComparison, WeeklyEntry } from '../api'
 import { toPeriodKey, type Granularity } from '../utils/periodUtils'
 
 echarts.use([
@@ -36,6 +36,8 @@ interface Props {
   contributors: Record<string, ContributorStats>
   /** 当前选中的用户列表，用于过滤趋势图行 */
   selectedLogins?: string[]
+  /** 各周期的环比与历史同期结果，用于 Tooltip */
+  comparisons?: Record<string, PeriodComparison>
   /** 点击柱子时的回调；login 为 undefined 表示总量柱 */
   onBarClick?: (period: string, login: string | undefined) => void
 }
@@ -46,6 +48,36 @@ const BAR_COLOR_DEL = '#ef4444'
 
 const AXIS = '#6b7280'
 const AXISLINE = '#e5e7eb'
+const COMPRESSED_SCALE_RATIO = 100
+
+type TrendBarData = {
+  value: number
+  rawValue: number
+}
+
+function shouldCompressScale(values: number[]) {
+  const nonZero = values.map(Math.abs).filter(value => value > 0)
+  if (nonZero.length < 2) return false
+  return Math.max(...nonZero) / Math.min(...nonZero) >= COMPRESSED_SCALE_RATIO
+}
+
+function signedLog1p(value: number) {
+  return Math.sign(value) * Math.log10(1 + Math.abs(value))
+}
+
+function lineBarData(value: number, compressed: boolean): number | TrendBarData {
+  if (!compressed) return value
+  return { value: signedLog1p(value), rawValue: value }
+}
+
+function formatAxisLines(value: number) {
+  if (value === 0) return '0'
+  const approximateValue = Math.sign(value) * 10 ** Math.abs(value)
+  return new Intl.NumberFormat(undefined, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(approximateValue)
+}
 
 /** 柱顶显示数值；为 0 的柱不标字，避免过密 */
 function barValueLabel(opts: { tiny?: boolean; color?: string }) {
@@ -69,13 +101,13 @@ const R_PAD = 16
 const GAP_AFTER_TOTAL = 60
 const MIN_ZOOM_RANGE = 5
 
-export function TrendChart({ weekly, granularity, metric = 'commits', contributors, selectedLogins = [], onBarClick }: Props) {
+export function TrendChart({ weekly, granularity, metric = 'commits', contributors, selectedLogins = [], comparisons, onBarClick }: Props) {
   const { t } = useI18n()
   const chartRef = useRef<ReactEChartsCore>(null)
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const { option, heightPx, truncated, totalLoginCount, personRowLabels } = useMemo(
-    () => buildTrendOption(weekly, granularity, metric, contributors, selectedLogins, { t }),
-    [weekly, granularity, metric, contributors, selectedLogins, t],
+    () => buildTrendOption(weekly, granularity, metric, contributors, selectedLogins, comparisons, { t }),
+    [weekly, granularity, metric, contributors, selectedLogins, comparisons, t],
   )
 
   const totalSeriesName = t('chart.totalSeries')
@@ -95,7 +127,8 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
     if (!container) return
 
     const handleWheel = (event: WheelEvent) => {
-      if (!event.shiftKey) return
+      const isHorizontalPan = !event.shiftKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)
+      if (!event.shiftKey && !isHorizontalPan) return
 
       const instance = chartRef.current?.getEchartsInstance()
       const zoom = (instance?.getOption().dataZoom as { start?: number; end?: number }[] | undefined)?.[0]
@@ -103,19 +136,34 @@ export function TrendChart({ weekly, granularity, metric = 'commits', contributo
 
       event.preventDefault()
 
-      const rawDelta = event.deltaY || event.deltaX
+      const rawDelta = isHorizontalPan ? event.deltaX : event.deltaY || event.deltaX
       const deltaPixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE
         ? rawDelta * 16
         : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
           ? rawDelta * window.innerHeight
           : rawDelta
-      const scale = Math.exp(Math.max(-100, Math.min(100, deltaPixels)) * 0.0025)
       const currentRange = zoom.end - zoom.start
-      const nextRange = Math.max(MIN_ZOOM_RANGE, Math.min(100, currentRange * scale))
 
       const rect = container.getBoundingClientRect()
       const plotLeft = rect.left + L_LEFT + L_NAME
       const plotWidth = Math.max(1, rect.width - L_LEFT - L_NAME - R_PAD)
+
+      if (isHorizontalPan) {
+        const nextStart = Math.max(
+          0,
+          Math.min(100 - currentRange, zoom.start + deltaPixels / plotWidth * currentRange),
+        )
+        instance.dispatchAction({
+          type: 'dataZoom',
+          dataZoomIndex: 0,
+          start: nextStart,
+          end: nextStart + currentRange,
+        })
+        return
+      }
+
+      const scale = Math.exp(Math.max(-100, Math.min(100, deltaPixels)) * 0.0025)
+      const nextRange = Math.max(MIN_ZOOM_RANGE, Math.min(100, currentRange * scale))
       const pointerRatio = Math.max(0, Math.min(1, (event.clientX - plotLeft) / plotWidth))
       const anchor = zoom.start + currentRange * pointerRatio
       let start = anchor - nextRange * pointerRatio
@@ -235,6 +283,7 @@ function buildTrendOption(
   metric: Metric,
   contributors: Record<string, ContributorStats>,
   selectedLogins: string[],
+  comparisons: Record<string, PeriodComparison> | undefined,
   l10n: L10n,
 ) {
   const { t } = l10n
@@ -291,6 +340,12 @@ function buildTrendOption(
   }
   
   const totalLoginCount = allSorted.length
+  const compressedLineScale = metric === 'lines' && shouldCompressScale(
+    periods.flatMap(period => [
+      periodMap[period].total_a,
+      periodMap[period].total_d,
+    ]),
+  )
 
   const nRows = 1 + logins.length
   const totalH = 260
@@ -323,9 +378,14 @@ function buildTrendOption(
   yAxes.push({
     type: 'value',
     gridIndex: 0,
-    name: metric === 'commits' ? t('chart.repoWide') : 'Lines (+/-)',
+    name: metric === 'commits'
+      ? t('chart.repoWide')
+      : `${t('chart.lines')} ${compressedLineScale ? `· ${t('chart.compressedScale')}` : ''}`,
     nameTextStyle: { color: AXIS, fontSize: 11, fontWeight: 600 },
-    min: 0,
+    min: metric === 'commits' ? 0 : undefined,
+    axisLabel: compressedLineScale
+      ? { formatter: formatAxisLines, color: AXIS, fontSize: 10 }
+      : undefined,
     splitLine: { lineStyle: { color: '#f3f4f6' } },
   })
 
@@ -347,7 +407,7 @@ function buildTrendOption(
       stack: 'total',
       xAxisIndex: 0,
       yAxisIndex: 0,
-      data: periods.map(p => periodMap[p].total_a),
+      data: periods.map(p => lineBarData(periodMap[p].total_a, compressedLineScale)),
       itemStyle: { color: BAR_COLOR_ADD },
       barMaxWidth: 20,
     })
@@ -357,7 +417,7 @@ function buildTrendOption(
       stack: 'total',
       xAxisIndex: 0,
       yAxisIndex: 0,
-      data: periods.map(p => -(periodMap[p].total_d ?? 0)),
+      data: periods.map(p => lineBarData(-(periodMap[p].total_d ?? 0), compressedLineScale)),
       itemStyle: { color: BAR_COLOR_DEL },
       barMaxWidth: 20,
     })
@@ -382,7 +442,10 @@ function buildTrendOption(
     yAxes.push({
       type: 'value',
       gridIndex: gi,
-      min: 0,
+      min: metric === 'commits' ? 0 : undefined,
+      axisLabel: compressedLineScale
+        ? { formatter: formatAxisLines, color: AXIS, fontSize: 9 }
+        : undefined,
       splitLine: { lineStyle: { color: '#f3f4f6' } },
     })
     const avatarUrl = contributors[login]?.avatar_url?.trim() ?? ''
@@ -406,7 +469,7 @@ function buildTrendOption(
         stack: login,
         xAxisIndex: gi,
         yAxisIndex: gi,
-        data: periods.map(p => periodMap[p].byLogin[login]?.a ?? 0),
+        data: periods.map(p => lineBarData(periodMap[p].byLogin[login]?.a ?? 0, compressedLineScale)),
         itemStyle: { color: BAR_COLOR_ADD, opacity: 0.8 },
         barMaxWidth: 16,
       })
@@ -416,7 +479,7 @@ function buildTrendOption(
         stack: login,
         xAxisIndex: gi,
         yAxisIndex: gi,
-        data: periods.map(p => -(periodMap[p].byLogin[login]?.d ?? 0)),
+        data: periods.map(p => lineBarData(-(periodMap[p].byLogin[login]?.d ?? 0), compressedLineScale)),
         itemStyle: { color: BAR_COLOR_DEL, opacity: 0.8 },
         barMaxWidth: 16,
       })
@@ -440,15 +503,37 @@ function buildTrendOption(
       borderWidth: 0,
       textStyle: { color: '#f9fafb', fontSize: 12 },
       formatter(params: unknown) {
-        const pList = params as { name: string; seriesName: string; value: number }[]
+        const pList = params as {
+          name: string
+          seriesName: string
+          value: number
+          data?: number | TrendBarData
+        }[]
         if (!pList || pList.length === 0) return ''
         const period = pList[0].name
         let res = `<div style="font-weight:600;margin-bottom:6px">${period}</div>`
         pList.forEach((p) => {
-          if (p.value === 0) return
-          const val = Math.abs(p.value)
-          res += `<div>${p.seriesName}: <span style="font-weight:600">${val}</span></div>`
+          const rawValue = typeof p.data === 'object' && p.data !== null
+            ? p.data.rawValue
+            : p.value
+          if (rawValue === 0) return
+          res += `<div>${p.seriesName}: <span style="font-weight:600">${Math.abs(rawValue).toLocaleString()}</span></div>`
         })
+        const comparison = comparisons?.[period]
+        if (comparison?.previous.available) {
+          const previous = comparison.previous.metrics
+          const detail = metric === 'commits'
+            ? `${previous.commits} ${t('table.commits')}`
+            : `+${previous.additions} / -${previous.deletions}`
+          res += `<div style="border-top:1px solid rgba(255,255,255,.18);margin-top:6px;padding-top:6px">${t('comparison.previous')} ${comparison.previous.label}: ${detail}</div>`
+        }
+        const samePeriod = comparison?.historical.find(point => point.available)
+        if (samePeriod) {
+          const detail = metric === 'commits'
+            ? `${samePeriod.metrics.commits} ${t('table.commits')}`
+            : `+${samePeriod.metrics.additions} / -${samePeriod.metrics.deletions}`
+          res += `<div>${t('comparison.samePeriod')} ${samePeriod.label}: ${detail}</div>`
+        }
         return res
       }
     },
@@ -467,12 +552,6 @@ function buildTrendOption(
         handleStyle: { color: BAR_COLOR_TOTAL },
         dataBackground: { lineStyle: { color: AXISLINE }, areaStyle: { color: 'rgba(99, 102, 241, 0.08)' } },
         textStyle: { color: AXIS, fontSize: 10 },
-      },
-      {
-        type: 'inside',
-        xAxisIndex: xIdx,
-        zoomOnMouseWheel: false,
-        moveOnMouseWheel: false,
       },
     ],
     grid: grids,

@@ -11,7 +11,7 @@ import (
 )
 
 func TestMouseTabAndGranularityClicks(t *testing.T) {
-	app := New(nil, nil, nil, nil, nil)
+	app := New(nil, nil, nil, nil, nil, nil)
 	defer app.zones.Close()
 	app.width = 100
 	app.height = 30
@@ -48,7 +48,7 @@ func TestMouseRepositoryFilterAndCommitRow(t *testing.T) {
 		{Repo: "example/one", Contributors: map[string]*cache.ContributorStats{}},
 		{Repo: "example/two", Contributors: map[string]*cache.ContributorStats{}},
 	}
-	app := New(nil, statsData, repos, nil, nil)
+	app := New(nil, statsData, repos, nil, nil, nil)
 	defer app.zones.Close()
 	app.width = 120
 	app.height = 30

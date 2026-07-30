@@ -56,4 +56,7 @@ func TestAggregate(t *testing.T) {
 	if len(result.Weekly) == 0 {
 		t.Error("expected weekly data")
 	}
+	if len(result.Daily) == 0 {
+		t.Error("expected daily data")
+	}
 }

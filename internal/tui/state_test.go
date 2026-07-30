@@ -12,7 +12,7 @@ func TestNormalizeStateClampsDynamicIndices(t *testing.T) {
 		{Repo: "example/one", Contributors: map[string]*cache.ContributorStats{}},
 	}
 	repos := []config.Repository{{Owner: "example", Repo: "one"}}
-	app := New(nil, statsData, repos, nil, nil)
+	app := New(nil, statsData, repos, nil, nil, nil)
 	defer app.zones.Close()
 
 	app.mode = 99
@@ -58,7 +58,7 @@ func TestNormalizeStateClampsDynamicIndices(t *testing.T) {
 }
 
 func TestViewNormalizesInvalidIndicesBeforeRendering(t *testing.T) {
-	app := New(nil, nil, nil, nil, nil)
+	app := New(nil, nil, nil, nil, nil, nil)
 	defer app.zones.Close()
 	app.mode = viewCommitList
 	app.commitListPeriodIdx = 17

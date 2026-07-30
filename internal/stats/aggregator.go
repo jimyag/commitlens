@@ -14,7 +14,14 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 		Repo:         raw.Repo,
 		ComputedAt:   time.Now().UTC(),
 		Contributors: make(map[string]*cache.ContributorStats),
+		Daily:        make(map[string]*cache.WeeklyEntry),
 		Weekly:       make(map[string]*cache.WeeklyEntry),
+	}
+	location := time.Local
+	if cfg != nil {
+		if configured, err := cfg.ReportingLocation(); err == nil {
+			location = configured
+		}
 	}
 
 	// Build a lookup map for aliases
@@ -57,7 +64,20 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 			c.Deletions += commit.Deletions
 		}
 
-		week := WeekKey(commit.Date)
+		localDate := commit.Date.In(location)
+		day := localDate.Format("2006-01-02")
+		d := getOrCreateWeek(result.Daily, day)
+		d.TotalCommits++
+		d.TotalAdditions += commit.Additions
+		d.TotalDeletions += commit.Deletions
+		for login := range uniqueInCommit {
+			cd := getOrCreateContributorWeekly(d.Contributors, login)
+			cd.Commits++
+			cd.Additions += commit.Additions
+			cd.Deletions += commit.Deletions
+		}
+
+		week := WeekKey(localDate)
 		w := getOrCreateWeek(result.Weekly, week)
 		w.TotalCommits++
 		w.TotalAdditions += commit.Additions

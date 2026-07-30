@@ -40,13 +40,15 @@ type FetchProgress struct {
 	Log string
 }
 
-func (s *Syncer) SyncAll(ctx context.Context, repos []config.Repository, progress chan<- Progress, repoWorkers int) {
+func (s *Syncer) SyncAll(ctx context.Context, repos []config.Repository, progress chan<- Progress, repoWorkers int) []error {
 	if repoWorkers <= 0 {
 		repoWorkers = 3
 	}
 
 	sem := make(chan struct{}, repoWorkers)
 	var wg sync.WaitGroup
+	var errorsMu sync.Mutex
+	var syncErrors []error
 
 	for i, repo := range repos {
 		i, repo := i, repo
@@ -70,6 +72,9 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []config.Repository, progres
 			}
 
 			if err := s.syncRepo(ctx, repo, onProg); err != nil {
+				errorsMu.Lock()
+				syncErrors = append(syncErrors, fmt.Errorf("%s: %w", repoID, err))
+				errorsMu.Unlock()
 				if progress != nil {
 					progress <- Progress{
 						Repo:      repoID,
@@ -96,6 +101,7 @@ func (s *Syncer) SyncAll(ctx context.Context, repos []config.Repository, progres
 	if progress != nil {
 		close(progress)
 	}
+	return syncErrors
 }
 
 func (s *Syncer) SyncRepo(ctx context.Context, repo config.Repository) error {

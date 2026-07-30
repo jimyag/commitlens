@@ -6,46 +6,77 @@ import { mergeContributors } from '../utils/statsUtils'
 
 interface AppContextValue {
   repos: string[]
+  defaultSyncRepos: string[]
   allStats: StatsData[]
   allContributors: Record<string, ContributorStats>
   syncing: boolean
   lastSyncAt: number | null
-  loadData: () => void
-  syncRepo: (repo?: string) => Promise<void>
+  loadData: () => Promise<void>
+  syncRepositories: (repositories?: string[]) => Promise<void>
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
 
+async function fetchAppData() {
+  const [repositoryResponse, statsResponse] = await Promise.all([api.getRepos(), api.getStats()])
+  const stats = statsResponse.data as { stats: StatsData[] }
+  return {
+    repositories: repositoryResponse.data.repos,
+    defaultSyncRepos: repositoryResponse.data.default_repositories ?? [],
+    stats: stats.stats ?? [],
+  }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [repos, setRepos] = useState<string[]>([])
+  const [defaultSyncRepos, setDefaultSyncRepos] = useState<string[]>([])
   const [allStats, setAllStats] = useState<StatsData[]>([])
   const [syncing, setSyncing] = useState(false)
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null)
 
-  const loadData = () => {
-    api.getRepos().then(r => setRepos(r.data.repos))
-    api.getStats().then(r => {
-      const data = r.data as { stats: StatsData[] }
-      setAllStats(data.stats ?? [])
-      setLastSyncAt(Date.now())
-    })
+  const loadData = async () => {
+    const data = await fetchAppData()
+    setRepos(data.repositories)
+    setDefaultSyncRepos(data.defaultSyncRepos)
+    setAllStats(data.stats)
+    setLastSyncAt(Date.now())
   }
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    let cancelled = false
+    void fetchAppData().then(data => {
+      if (cancelled) return
+      setRepos(data.repositories)
+      setDefaultSyncRepos(data.defaultSyncRepos)
+      setAllStats(data.stats)
+      setLastSyncAt(Date.now())
+    })
+    return () => { cancelled = true }
+  }, [])
 
-  const syncRepo = async (repo?: string) => {
+  const syncRepositories = async (repositories?: string[]) => {
     setSyncing(true)
-    await api.sync(repo)
-    setTimeout(() => {
-      loadData()
+    try {
+      await api.sync(repositories)
+      await loadData()
+    } finally {
       setSyncing(false)
-    }, 3000)
+    }
   }
 
   const allContributors = mergeContributors(allStats)
 
   return (
-    <AppContext.Provider value={{ repos, allStats, allContributors, syncing, lastSyncAt, loadData, syncRepo }}>
+    <AppContext.Provider value={{
+      repos,
+      defaultSyncRepos,
+      allStats,
+      allContributors,
+      syncing,
+      lastSyncAt,
+      loadData,
+      syncRepositories,
+    }}>
       {children}
     </AppContext.Provider>
   )

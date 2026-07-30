@@ -10,6 +10,7 @@ export const en = {
   'app.granularity.year': 'Yearly',
   'app.syncing': 'Syncing…',
   'app.refresh': 'Refresh',
+  'app.selectReposToSync': 'Select repositories',
   'app.lastSync': 'Last updated:',
   'app.scope.multifmt': '{n} selected',
   'app.section.trendTitle': 'Commit trend',
@@ -29,10 +30,22 @@ export const en = {
   'trend.emptyWeekly': 'No weekly data yet; run sync from the TUI/CLI or click Refresh.',
   'trend.truncated': 'For readability, the chart shows the top {n} contributors by commit count ({total} people); see the Contributors page for everyone.',
 
+  'comparison.title': 'Period comparison',
+  'comparison.current': 'Current',
+  'comparison.previous': 'Previous',
+  'comparison.samePeriod': 'Same period',
+  'comparison.noData': 'No comparable data',
+  'comparison.currentVsPeriod': 'Current difference',
+  'comparison.inProgress': 'In progress; compared at the same elapsed point',
+  'comparison.repoScope': 'Repository scope',
+  'comparison.selectedContributors': 'Selected contributors',
+
   'chart.repoWide': 'Repo-wide',
   'chart.totalSeries': 'Repo total',
+  'chart.lines': 'Lines (+/-)',
+  'chart.compressedScale': 'compressed scale',
   'chart.sub':
-    'Granularity: {g} · same periods in each row; hover a bar; use the bottom slider or Shift + wheel to adjust the range.',
+    'Granularity: {g} · scroll vertically to browse; swipe horizontally to move the range; Shift + wheel to zoom.',
   'chart.prOnTop': 'Commit count on top',
   'chart.tooltipLine': '{who}: <span style="font-weight:600">{value}</span> commits',
 

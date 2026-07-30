@@ -11,6 +11,7 @@ A universal Git contribution analyzer that tracks **commits**, **additions**, an
 - **Contribution Trends**:
   - **Commit Volume**: Visualize submission frequency over time.
   - **Code Lines**: Track code churn with stacked addition/deletion trends (New!).
+  - **Period Comparisons**: Compare each period with the immediately previous period and up to three matching historical periods.
 - **Interactive TUI**: A fast, keyboard-driven terminal interface powered by `bubbletea`.
 - **Modern Web UI**: A searchable, scrollable React interface with high-density ECharts visualizations.
 - **Deduplicated Co-authorship**: Correctly credits all participants in a commit (via `Co-authored-by` trailers).
@@ -40,10 +41,25 @@ Create a `config.yaml`:
 discoveryRoots:
   - ~/src/github.com/kubernetes  # Automatically scan all git repos in this folder
 repositories:
-  - url: https://github.com/kubeovn/kube-ovn.git # Remote repo
+  - owner: example-org           # Web: discover repositories, then select which ones to sync
+  - owner: example-org
+    repo: example-repo           # Exact remote repository; synced by default
 userMap:
   "Jim Yang": ["jimyag", "yang.jim@example.com"] # Map aliases to a single person
+reporting:
+  timezone: Local                # Or an IANA zone such as Asia/Taipei
 ```
+
+An owner-only repository entry is a Web discovery source. CommitLens lists the
+repositories accessible to the configured GitHub token, but does not
+automatically synchronize the whole organization. Select repositories from the
+Web repository dropdown, then click **Refresh**. Exact `owner` + `repo` entries
+and discovered local repositories keep their existing default-sync behavior.
+
+Commit and line trend pages in both Web and TUI include a comparison chart.
+Weekly comparisons use the same week position in earlier months; monthly and
+quarterly comparisons use the same period in earlier years. An in-progress
+period is compared at the same elapsed point.
 
 ### Usage
 ```bash

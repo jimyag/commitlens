@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useApp } from './context/AppContext'
 import { mergeContributors, mergeWeekly } from './utils/statsUtils'
-import type { ContributorStats } from './api'
+import { api, type ComparisonSet, type ContributorStats } from './api'
 import { TrendChart } from './components/TrendChart'
 import type { Granularity } from './components/TrendChart'
+import { ComparisonChart } from './components/ComparisonChart'
 import { useI18n } from './i18n/I18nContext'
 import type { MessageKey } from './i18n/bundles/en'
 
@@ -50,6 +51,28 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
   }, [filteredStats, selectedLogins])
 
   const weekly = mergeWeekly(filteredStats)
+  const [comparisonSet, setComparisonSet] = useState<ComparisonSet | null>(null)
+  const repositoryKey = selectedRepos.join(',')
+  const loginKey = selectedLogins.join(',')
+
+  useEffect(() => {
+    let cancelled = false
+    void api.getComparison({
+      repositories: selectedRepos,
+      logins: selectedLogins,
+      granularity: gran,
+    }).then(response => {
+      if (!cancelled) setComparisonSet(response.data)
+    }).catch(() => {
+      if (!cancelled) setComparisonSet(null)
+    })
+    return () => { cancelled = true }
+  }, [allStats, gran, loginKey, repositoryKey, selectedLogins, selectedRepos])
+
+  const latestComparison = useMemo(() => {
+    const latest = comparisonSet?.periods.at(-1)
+    return latest ? comparisonSet?.comparisons[latest] : undefined
+  }, [comparisonSet])
 
   const handleBarClick = (period: string, login: string | undefined) => {
     const next = new URLSearchParams(searchParams)
@@ -78,6 +101,11 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
             {tf('chart.sub', { g: t(granularityKey[gran]) })}
           </p>
         </div>
+        <ComparisonChart
+          comparison={latestComparison}
+          metric={metric}
+          filteredByContributors={selectedLogins.length > 0}
+        />
         <div style={{
           background: '#fff',
           border: '1px solid #e5e7eb',
@@ -90,6 +118,7 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
             metric={metric}
             contributors={contributors}
             selectedLogins={selectedLogins}
+            comparisons={comparisonSet?.comparisons}
             onBarClick={handleBarClick}
           />
         </div>
