@@ -176,6 +176,12 @@ export function Layout() {
             >
               {t('nav.prs')}
             </NavLink>
+            <NavLink
+              to={{ pathname: '/identities', search: searchParams.toString() }}
+              style={({ isActive }) => navLinkStyle(isActive)}
+            >
+              {t('nav.identities')}
+            </NavLink>
           </nav>
 
           {/* 仓库多选 */}

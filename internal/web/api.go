@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -21,7 +22,209 @@ func (s *Server) registerAPI() {
 	api.GET("/commits", s.handleGetCommits) // Renamed from /prs
 	api.GET("/comparison", s.handleGetComparison)
 	api.GET("/comparison/selected", s.handleGetSelectedComparison)
+	api.GET("/identities", s.handleGetIdentities)
+	api.PUT("/identities", s.handleUpdateIdentities)
 	api.POST("/sync", s.handleSync)
+}
+
+type contributorIdentity struct {
+	Canonical   string   `json:"canonical"`
+	Aliases     []string `json:"aliases"`
+	Emails      []string `json:"emails"`
+	CommitCount int      `json:"commit_count"`
+	Hidden      bool     `json:"hidden"`
+	LikelyBot   bool     `json:"likely_bot"`
+}
+
+type identitySettingsResponse struct {
+	Identities   []contributorIdentity `json:"identities"`
+	UserMap      map[string][]string   `json:"user_map"`
+	IgnoredUsers []string              `json:"ignored_users"`
+}
+
+type updateIdentitySettingsRequest struct {
+	UserMap      map[string][]string `json:"user_map"`
+	IgnoredUsers []string            `json:"ignored_users"`
+}
+
+func (s *Server) handleGetIdentities(c *gin.Context) {
+	c.JSON(http.StatusOK, s.identitySettingsResponse())
+}
+
+func (s *Server) handleUpdateIdentities(c *gin.Context) {
+	var request updateIdentitySettingsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid identity settings"})
+		return
+	}
+	if err := validateIdentitySettings(request.UserMap); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.cfg.UpdateIdentitySettings(request.UserMap, request.IgnoredUsers); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	for _, repoID := range s.repoNames {
+		raw, err := s.rawCache.Load(repoID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := s.statsCache.Save(stats.Aggregate(raw, s.cfg)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, s.identitySettingsResponse())
+}
+
+func (s *Server) identitySettingsResponse() identitySettingsResponse {
+	userMap, ignoredUsers := s.cfg.IdentitySettings()
+	ignored := make(map[string]struct{}, len(ignoredUsers))
+	aliasMap := make(map[string]string)
+	for canonical, aliases := range userMap {
+		aliasMap[strings.ToLower(canonical)] = canonical
+		for _, alias := range aliases {
+			aliasMap[strings.ToLower(alias)] = canonical
+		}
+	}
+	resolveUser := func(name string) string {
+		if canonical, ok := aliasMap[strings.ToLower(name)]; ok {
+			return canonical
+		}
+		return name
+	}
+	for _, name := range ignoredUsers {
+		ignored[strings.ToLower(name)] = struct{}{}
+	}
+
+	type identityAccumulator struct {
+		canonical string
+		aliases   map[string]string
+		emails    map[string]string
+		commits   int
+	}
+	accumulators := make(map[string]*identityAccumulator)
+	getAccumulator := func(canonical string) *identityAccumulator {
+		key := strings.ToLower(canonical)
+		if accumulators[key] == nil {
+			accumulators[key] = &identityAccumulator{
+				canonical: canonical,
+				aliases:   make(map[string]string),
+				emails:    make(map[string]string),
+			}
+		}
+		return accumulators[key]
+	}
+
+	for canonical, aliases := range userMap {
+		acc := getAccumulator(canonical)
+		for _, alias := range aliases {
+			acc.aliases[strings.ToLower(alias)] = alias
+		}
+	}
+	for _, repoID := range s.repoNames {
+		raw, err := s.rawCache.Load(repoID)
+		if err != nil {
+			continue
+		}
+		for _, commit := range raw.Commits {
+			participants := commit.Participants
+			if len(participants) == 0 {
+				participants = []string{commit.Author}
+			}
+			seen := make(map[string]struct{}, len(participants))
+			for _, participant := range participants {
+				canonical := resolveUser(participant)
+				key := strings.ToLower(canonical)
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				acc := getAccumulator(canonical)
+				acc.commits++
+				if !strings.EqualFold(participant, canonical) {
+					acc.aliases[strings.ToLower(participant)] = participant
+				}
+				if strings.EqualFold(participant, commit.Author) && commit.AuthorEmail != "" {
+					acc.emails[strings.ToLower(commit.AuthorEmail)] = commit.AuthorEmail
+				}
+			}
+		}
+	}
+
+	identities := make([]contributorIdentity, 0, len(accumulators))
+	for _, acc := range accumulators {
+		canonical := acc.canonical
+		aliases := mapValues(acc.aliases)
+		emails := mapValues(acc.emails)
+		_, hidden := ignored[strings.ToLower(canonical)]
+		identities = append(identities, contributorIdentity{
+			Canonical:   canonical,
+			Aliases:     aliases,
+			Emails:      emails,
+			CommitCount: acc.commits,
+			Hidden:      hidden,
+			LikelyBot:   isLikelyBot(canonical, aliases),
+		})
+	}
+	sort.Slice(identities, func(i, j int) bool {
+		if identities[i].CommitCount != identities[j].CommitCount {
+			return identities[i].CommitCount > identities[j].CommitCount
+		}
+		return strings.ToLower(identities[i].Canonical) < strings.ToLower(identities[j].Canonical)
+	})
+	return identitySettingsResponse{
+		Identities:   identities,
+		UserMap:      userMap,
+		IgnoredUsers: ignoredUsers,
+	}
+}
+
+func mapValues(values map[string]string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, value)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.ToLower(result[i]) < strings.ToLower(result[j])
+	})
+	return result
+}
+
+func isLikelyBot(canonical string, aliases []string) bool {
+	names := append([]string{canonical}, aliases...)
+	for _, name := range names {
+		lower := strings.ToLower(name)
+		if strings.HasSuffix(lower, "[bot]") || strings.HasSuffix(lower, "-bot") ||
+			strings.HasSuffix(lower, "_bot") || strings.Contains(lower, "automation") {
+			return true
+		}
+	}
+	return false
+}
+
+func validateIdentitySettings(userMap map[string][]string) error {
+	owners := make(map[string]string)
+	for canonical, aliases := range userMap {
+		canonical = strings.TrimSpace(canonical)
+		if canonical == "" {
+			return fmt.Errorf("canonical identity cannot be empty")
+		}
+		for _, name := range append([]string{canonical}, aliases...) {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			key := strings.ToLower(name)
+			if owner, exists := owners[key]; exists && !strings.EqualFold(owner, canonical) {
+				return fmt.Errorf("identity %q belongs to both %q and %q", name, owner, canonical)
+			}
+			owners[key] = canonical
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleGetStats(c *gin.Context) {

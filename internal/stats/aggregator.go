@@ -26,13 +26,18 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 
 	// Build a lookup map for aliases
 	aliasMap := make(map[string]string)
+	ignoredUsers := make(map[string]struct{})
 	if cfg != nil {
-		for canonical, aliases := range cfg.UserMap {
+		userMap, ignored := cfg.IdentitySettings()
+		for canonical, aliases := range userMap {
 			for _, alias := range aliases {
 				aliasMap[strings.ToLower(alias)] = canonical
 			}
 			// Also ensure canonical name itself maps to itself if it appeared as an alias elsewhere
 			aliasMap[strings.ToLower(canonical)] = canonical
+		}
+		for _, name := range ignored {
+			ignoredUsers[strings.ToLower(name)] = struct{}{}
 		}
 	}
 
@@ -53,7 +58,11 @@ func Aggregate(raw *cache.RawData, cfg *config.Config) *cache.StatsData {
 		// Use a temporary map to ensure each canonical person is only counted ONCE per commit.
 		uniqueInCommit := make(map[string]struct{})
 		for _, p := range participants {
-			uniqueInCommit[resolveName(p)] = struct{}{}
+			login := resolveName(p)
+			if _, ignored := ignoredUsers[strings.ToLower(login)]; ignored {
+				continue
+			}
+			uniqueInCommit[login] = struct{}{}
 		}
 
 		for login := range uniqueInCommit {

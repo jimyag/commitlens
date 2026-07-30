@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -68,6 +70,71 @@ func TestSyncRejectsUnknownRepository(t *testing.T) {
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("POST /api/sync status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestUpdateIdentitiesPersistsAndRebuildsStats(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("repositories: []\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	rawCache := cache.NewRawCache(filepath.Join(dir, "cache"))
+	statsCache := cache.NewStatsCache(filepath.Join(dir, "cache"))
+	if err := rawCache.Save(&cache.RawData{
+		Repo: "sample/alpha",
+		Commits: []gitdata.Commit{{
+			Author:       "Alice Example",
+			AuthorEmail:  "alice@example.test",
+			Participants: []string{"Alice Example", "automation[bot]"},
+			Date:         time.Now().UTC(),
+		}},
+	}); err != nil {
+		t.Fatalf("save raw cache: %v", err)
+	}
+
+	server := &Server{
+		engine:     gin.New(),
+		repoNames:  []string{"sample/alpha"},
+		cfg:        cfg,
+		rawCache:   rawCache,
+		statsCache: statsCache,
+	}
+	server.registerAPI()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPut,
+		"/api/identities",
+		strings.NewReader(`{"user_map":{"alice":["Alice Example"]},"ignored_users":["automation[bot]"]}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	server.engine.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("PUT /api/identities status = %d, body = %s", response.Code, response.Body.String())
+	}
+	rebuilt, err := statsCache.Load("sample/alpha")
+	if err != nil {
+		t.Fatalf("load rebuilt stats: %v", err)
+	}
+	if rebuilt.Contributors["alice"] == nil {
+		t.Fatalf("canonical contributor missing: %#v", rebuilt.Contributors)
+	}
+	if rebuilt.Contributors["automation[bot]"] != nil {
+		t.Fatalf("ignored contributor remains: %#v", rebuilt.Contributors)
+	}
+	reloaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if len(reloaded.UserMap["alice"]) != 1 || len(reloaded.IgnoredUsers) != 1 {
+		t.Fatalf("identity settings not persisted: %#v %#v", reloaded.UserMap, reloaded.IgnoredUsers)
 	}
 }
 

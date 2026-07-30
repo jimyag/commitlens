@@ -9,6 +9,15 @@ reporting:
   # "Local" uses the machine timezone.
   timezone: Local
 
+# Merge alternate author names into a canonical contributor identity.
+userMap:
+  example-user:
+    - Example User
+
+# Exclude selected identities from contributor rankings and detail charts.
+ignoredUsers:
+  - automation[bot]
+
 repositories:
   # Web mode: discover repositories from an organization, then select which
   # repositories to synchronize from the repository dropdown.

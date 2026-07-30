@@ -9,6 +9,9 @@ const ContributorPage = lazy(() =>
 const PRListPage = lazy(() =>
   import('./components/PRListPage').then(module => ({ default: module.PRListPage })),
 )
+const IdentityPage = lazy(() =>
+  import('./components/IdentityPage').then(module => ({ default: module.IdentityPage })),
+)
 
 export function AppRoutes() {
   return (
@@ -19,6 +22,7 @@ export function AppRoutes() {
           <Route path="/contributors" element={<ContributorPage />} />
           <Route path="/lines" element={<App metric="lines" />} />
           <Route path="/prs" element={<PRListPage />} />
+          <Route path="/identities" element={<IdentityPage />} />
         </Route>
       </Routes>
     </Suspense>

@@ -44,6 +44,21 @@ export interface RepositoryList {
   default_repositories: string[]
 }
 
+export interface ContributorIdentity {
+  canonical: string
+  aliases: string[]
+  emails: string[]
+  commit_count: number
+  hidden: boolean
+  likely_bot: boolean
+}
+
+export interface IdentitySettings {
+  identities: ContributorIdentity[]
+  user_map: Record<string, string[]>
+  ignored_users: string[]
+}
+
 export interface ComparisonMetrics {
   commits: number
   additions: number
@@ -77,6 +92,9 @@ export interface SelectedComparison {
 
 export const api = {
   getRepos: () => axios.get<RepositoryList>('/api/repos'),
+  getIdentities: () => axios.get<IdentitySettings>('/api/identities'),
+  updateIdentities: (settings: Pick<IdentitySettings, 'user_map' | 'ignored_users'>) =>
+    axios.put<IdentitySettings>('/api/identities', settings),
   getStats: (repo?: string) =>
     repo
       ? axios.get<StatsData>('/api/stats', { params: { repo } })

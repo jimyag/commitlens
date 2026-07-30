@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jimyag/commitlens/internal/cache"
+	"github.com/jimyag/commitlens/internal/config"
 	"github.com/jimyag/commitlens/internal/git"
 	"github.com/jimyag/commitlens/internal/stats"
 )
@@ -58,5 +59,33 @@ func TestAggregate(t *testing.T) {
 	}
 	if len(result.Daily) == 0 {
 		t.Error("expected daily data")
+	}
+}
+
+func TestAggregateAppliesAliasesAndIgnoredUsers(t *testing.T) {
+	now := time.Now().UTC()
+	raw := &cache.RawData{
+		Repo: "sample/repository",
+		Commits: []git.Commit{
+			{Author: "Alice Example", Participants: []string{"Alice Example"}, Date: now, Additions: 4},
+			{Author: "alice", Participants: []string{"alice", "automation[bot]"}, Date: now, Additions: 6},
+		},
+	}
+	cfg := &config.Config{
+		UserMap:      map[string][]string{"alice": {"Alice Example"}},
+		IgnoredUsers: []string{"automation[bot]"},
+	}
+
+	result := stats.Aggregate(raw, cfg)
+
+	alice := result.Contributors["alice"]
+	if alice == nil || alice.CommitCount != 2 || alice.Additions != 10 {
+		t.Fatalf("unexpected canonical stats: %#v", alice)
+	}
+	if _, exists := result.Contributors["Alice Example"]; exists {
+		t.Fatal("alias should not remain as a separate contributor")
+	}
+	if _, exists := result.Contributors["automation[bot]"]; exists {
+		t.Fatal("ignored identity should not be included")
 	}
 }
