@@ -105,8 +105,16 @@ export function Layout() {
     const list = repoSearch
       ? allRepoIDs.filter(r => r.toLowerCase().includes(repoSearch.toLowerCase()))
       : allRepoIDs
-    return [...list].sort()
-  }, [allRepoIDs, repoSearch])
+    const selectedOrder = new Map(selectedRepos.map((id, index) => [id, index]))
+    return [...list].sort((a, b) => {
+      const aOrder = selectedOrder.get(a)
+      const bOrder = selectedOrder.get(b)
+      if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder
+      if (aOrder !== undefined) return -1
+      if (bOrder !== undefined) return 1
+      return a.localeCompare(b)
+    })
+  }, [allRepoIDs, repoSearch, selectedRepos])
 
   // 2. 过滤可选的用户列表
   const fullContributorList = useMemo(() => {
