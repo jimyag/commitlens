@@ -59,6 +59,18 @@ export interface IdentitySettings {
   ignored_users: string[]
 }
 
+export interface RepositorySyncStatus {
+  repo: string
+  state: 'not_synced' | 'syncing' | 'success' | 'failed'
+  last_log: string
+  error?: string
+  last_attempt?: string
+  last_success?: string
+  duration_ms: number
+  commit_count: number
+  has_data: boolean
+}
+
 export interface ComparisonMetrics {
   commits: number
   additions: number
@@ -95,6 +107,7 @@ export const api = {
   getIdentities: () => axios.get<IdentitySettings>('/api/identities'),
   updateIdentities: (settings: Pick<IdentitySettings, 'user_map' | 'ignored_users'>) =>
     axios.put<IdentitySettings>('/api/identities', settings),
+  getSyncStatus: () => axios.get<{ statuses: RepositorySyncStatus[] }>('/api/sync/status'),
   getStats: (repo?: string) =>
     repo
       ? axios.get<StatsData>('/api/stats', { params: { repo } })

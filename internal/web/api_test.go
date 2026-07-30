@@ -138,6 +138,60 @@ func TestUpdateIdentitiesPersistsAndRebuildsStats(t *testing.T) {
 	}
 }
 
+func TestGetSyncStatusDistinguishesFailureFromEmptyRepository(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rawCache := cache.NewRawCache(t.TempDir())
+	now := time.Now().UTC()
+	if err := rawCache.Save(&cache.RawData{Repo: "sample/empty", LastUpdated: now}); err != nil {
+		t.Fatalf("save empty raw cache: %v", err)
+	}
+	if err := rawCache.SaveStatus(&cache.SyncStatus{
+		Repo:        "sample/empty",
+		State:       "success",
+		LastSuccess: now,
+		Duration:    2 * time.Second,
+	}); err != nil {
+		t.Fatalf("save success status: %v", err)
+	}
+	if err := rawCache.SaveStatus(&cache.SyncStatus{
+		Repo:  "sample/failing",
+		State: "failed",
+		Error: "authentication failed",
+	}); err != nil {
+		t.Fatalf("save failure status: %v", err)
+	}
+
+	server := &Server{
+		engine:    gin.New(),
+		repoNames: []string{"sample/empty", "sample/failing"},
+		rawCache:  rawCache,
+	}
+	server.registerAPI()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/sync/status", nil)
+	server.engine.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/sync/status status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Statuses []repositorySyncStatus `json:"statuses"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Statuses) != 2 {
+		t.Fatalf("unexpected statuses: %#v", body.Statuses)
+	}
+	if body.Statuses[0].State != "success" || body.Statuses[0].HasData != true || body.Statuses[0].CommitCount != 0 {
+		t.Fatalf("empty repository should be a successful sync: %#v", body.Statuses[0])
+	}
+	if body.Statuses[1].State != "failed" || body.Statuses[1].Error == "" || body.Statuses[1].HasData {
+		t.Fatalf("failure status not preserved: %#v", body.Statuses[1])
+	}
+}
+
 func TestGetStatsReadsLatestCache(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	statsCache := cache.NewStatsCache(t.TempDir())

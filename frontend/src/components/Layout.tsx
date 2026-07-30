@@ -5,6 +5,7 @@ import { useI18n, type Lang } from '../i18n/I18nContext'
 import type { MessageKey } from '../i18n/bundles/en'
 import type { ContributorStats } from '../api'
 import type { Granularity } from './TrendChart'
+import { SyncStatusPanel } from './SyncStatusPanel'
 
 function navLinkStyle(isActive: boolean): React.CSSProperties {
   return {
@@ -46,6 +47,7 @@ export function Layout() {
 
   const [repoOpen, setRepoOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const [syncStatusOpen, setSyncStatusOpen] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
   const [userSearch, setUserSearch] = useState('')
 
@@ -272,8 +274,17 @@ export function Layout() {
             )}
           </div>
 
+          <SyncStatusPanel
+            open={syncStatusOpen}
+            onToggle={() => setSyncStatusOpen(value => !value)}
+            onClose={() => setSyncStatusOpen(false)}
+          />
+
           <button
-            onClick={() => syncRepositories(selectedRepos.length > 0 ? selectedRepos : undefined)}
+            onClick={() => {
+              void syncRepositories(selectedRepos.length > 0 ? selectedRepos : undefined)
+                .catch(() => setSyncStatusOpen(true))
+            }}
             disabled={syncing || !canSync}
             style={{
               padding: '6px 14px', borderRadius: 8, background: '#4f46e5', color: '#fff',

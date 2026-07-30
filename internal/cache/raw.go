@@ -31,11 +31,18 @@ func repoKey(repo string) string {
 func (c *RawCache) Dir() string { return c.dir }
 
 type SyncStatus struct {
-	Repo        string    `json:"repo"`
-	LastLog     string    `json:"last_log"`
-	LastUpdated time.Time `json:"last_updated"`
-	Syncing     bool      `json:"syncing"`
-	PID         int       `json:"pid"`
+	Repo        string        `json:"repo"`
+	State       string        `json:"state"`
+	LastLog     string        `json:"last_log"`
+	Error       string        `json:"error,omitempty"`
+	LastUpdated time.Time     `json:"last_updated"`
+	LastAttempt time.Time     `json:"last_attempt,omitempty"`
+	LastSuccess time.Time     `json:"last_success,omitempty"`
+	StartedAt   time.Time     `json:"started_at,omitempty"`
+	FinishedAt  time.Time     `json:"finished_at,omitempty"`
+	Duration    time.Duration `json:"duration,omitempty"`
+	Syncing     bool          `json:"syncing"`
+	PID         int           `json:"pid"`
 }
 
 func (c *RawCache) statusPath(repo string) string {

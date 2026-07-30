@@ -24,7 +24,71 @@ func (s *Server) registerAPI() {
 	api.GET("/comparison/selected", s.handleGetSelectedComparison)
 	api.GET("/identities", s.handleGetIdentities)
 	api.PUT("/identities", s.handleUpdateIdentities)
+	api.GET("/sync/status", s.handleGetSyncStatus)
 	api.POST("/sync", s.handleSync)
+}
+
+type repositorySyncStatus struct {
+	Repo        string     `json:"repo"`
+	State       string     `json:"state"`
+	LastLog     string     `json:"last_log"`
+	Error       string     `json:"error,omitempty"`
+	LastAttempt *time.Time `json:"last_attempt,omitempty"`
+	LastSuccess *time.Time `json:"last_success,omitempty"`
+	DurationMS  int64      `json:"duration_ms"`
+	CommitCount int        `json:"commit_count"`
+	HasData     bool       `json:"has_data"`
+}
+
+func (s *Server) handleGetSyncStatus(c *gin.Context) {
+	statuses := make([]repositorySyncStatus, 0, len(s.repoNames))
+	for _, repoID := range s.repoNames {
+		status, err := s.rawCache.LoadStatus(repoID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		raw, err := s.rawCache.Load(repoID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		state := status.State
+		switch {
+		case status.Syncing:
+			state = "syncing"
+		case state != "":
+		case status.Error != "":
+			state = "failed"
+		case !raw.LastUpdated.IsZero():
+			state = "success"
+		default:
+			state = "not_synced"
+		}
+		lastSuccess := status.LastSuccess
+		if lastSuccess.IsZero() && state == "success" {
+			lastSuccess = raw.LastUpdated
+		}
+		statuses = append(statuses, repositorySyncStatus{
+			Repo:        repoID,
+			State:       state,
+			LastLog:     status.LastLog,
+			Error:       status.Error,
+			LastAttempt: optionalTime(status.LastAttempt),
+			LastSuccess: optionalTime(lastSuccess),
+			DurationMS:  status.Duration.Milliseconds(),
+			CommitCount: len(raw.Commits),
+			HasData:     !raw.LastUpdated.IsZero(),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"statuses": statuses})
+}
+
+func optionalTime(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
 }
 
 type contributorIdentity struct {

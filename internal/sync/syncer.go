@@ -108,36 +108,55 @@ func (s *Syncer) SyncRepo(ctx context.Context, repo config.Repository) error {
 	return s.syncRepo(ctx, repo, nil)
 }
 
-func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgress func(FetchProgress)) error {
+func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgress func(FetchProgress)) (syncErr error) {
 	repoID := repo.ID()
 
 	// Check locking
-	status, err := s.rawCache.LoadStatus(repoID)
-	if err == nil && status.Syncing {
+	previousStatus, err := s.rawCache.LoadStatus(repoID)
+	if err == nil && previousStatus.Syncing {
 		// Verify if the process is actually still alive
-		if status.PID > 0 {
-			if p, err := os.FindProcess(status.PID); err == nil {
+		if previousStatus.PID > 0 {
+			if p, err := os.FindProcess(previousStatus.PID); err == nil {
 				// On Unix, FindProcess always succeeds. We need to check if signal 0 works.
 				if err := p.Signal(os.Signal(nil)); err == nil {
-					return fmt.Errorf("repository is already being synced by PID %d", status.PID)
+					return fmt.Errorf("repository is already being synced by PID %d", previousStatus.PID)
 				}
 			}
 		}
 	}
 
 	// Set lock
-	status = &cache.SyncStatus{
+	startedAt := time.Now().UTC()
+	status := &cache.SyncStatus{
 		Repo:        repoID,
+		State:       "syncing",
 		Syncing:     true,
 		PID:         os.Getpid(),
-		LastUpdated: time.Now().UTC(),
+		LastUpdated: startedAt,
+		LastAttempt: startedAt,
+		StartedAt:   startedAt,
+	}
+	if previousStatus != nil {
+		status.LastSuccess = previousStatus.LastSuccess
 	}
 	_ = s.rawCache.SaveStatus(status)
 
 	// Ensure lock is released on exit
 	defer func() {
+		finishedAt := time.Now().UTC()
 		status.Syncing = false
-		status.LastUpdated = time.Now().UTC()
+		status.PID = 0
+		status.LastUpdated = finishedAt
+		status.FinishedAt = finishedAt
+		status.Duration = finishedAt.Sub(startedAt)
+		if syncErr != nil {
+			status.State = "failed"
+			status.Error = syncErr.Error()
+		} else {
+			status.State = "success"
+			status.Error = ""
+			status.LastSuccess = finishedAt
+		}
 		_ = s.rawCache.SaveStatus(status)
 	}()
 
