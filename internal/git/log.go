@@ -23,10 +23,6 @@ func GetCommits(ctx context.Context, gitDir, revRange string) ([]Commit, error) 
 	args := []string{"--git-dir=" + gitDir, "log", "--format=" + format, "--numstat"}
 	if revRange != "" {
 		args = append(args, revRange)
-	} else {
-		// Use HEAD or origin/master etc. depending on what's available.
-		// For bare clones of github, origin/HEAD or specific branches are usually what we want.
-		// By default 'git log' uses HEAD.
 	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)

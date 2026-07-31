@@ -19,7 +19,9 @@ func TestListOrganizationRepositories(t *testing.T) {
 			sawAuthorization = true
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `[{"name":"alpha"},{"name":"beta"}]`)
+		if _, err := fmt.Fprint(w, `[{"name":"alpha"},{"name":"beta"}]`); err != nil {
+			t.Errorf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

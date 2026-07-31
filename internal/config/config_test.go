@@ -17,7 +17,9 @@ repositories:
   - owner: jimyag
     repo: commitlens
 `
-	os.WriteFile(cfgPath, []byte(content), 0o644)
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {

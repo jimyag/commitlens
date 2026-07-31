@@ -88,7 +88,9 @@ func (c *Client) ListOrganizationRepositories(ctx context.Context, owner string)
 				strings.TrimSpace(string(body)),
 			)
 		}
-		resp.Body.Close()
+		if closeErr := resp.Body.Close(); err == nil {
+			err = closeErr
+		}
 		if err != nil {
 			return nil, err
 		}

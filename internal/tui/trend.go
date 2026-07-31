@@ -158,11 +158,7 @@ func renderLinesTrendView(a *App) string {
 	// For Deletions, we use a different color (red)
 	addChart := renderBarChart(periods, addValues, chartWidth, 10, false, selIdx, a.globalGranularity)
 
-	// Temporarily swap styles to render deletions in Red
-	oldStyle := barValueStyle
-	barValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("9"))
 	delChart := renderBarChart(periods, delValues, chartWidth, 10, false, selIdx, a.globalGranularity)
-	barValueStyle = oldStyle
 	comparisonIdx := len(periods) - 1
 	if a.globalFocus == 3 && a.trendPeriodCursor >= 0 && a.trendPeriodCursor < len(periods) {
 		comparisonIdx = a.trendPeriodCursor
@@ -704,7 +700,9 @@ func toPeriodKey(weekKey string, granularity int) string {
 	}
 	// Parse "YYYY-Www" → approximate date using Jan 1 + week offset
 	var year, week int
-	fmt.Sscanf(weekKey, "%d-W%d", &year, &week)
+	if _, err := fmt.Sscanf(weekKey, "%d-W%d", &year, &week); err != nil {
+		return weekKey
+	}
 	// Jan 4 is always in week 1 per ISO 8601
 	jan4 := time.Date(year, 1, 4, 0, 0, 0, 0, time.UTC)
 	weekday := int(jan4.Weekday())

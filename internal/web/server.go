@@ -82,7 +82,7 @@ func (s *Server) mountFrontend(assets embed.FS) {
 				return
 			}
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		info, err := f.Stat()
 		if err != nil {
 			http.NotFound(c.Writer, c.Request)

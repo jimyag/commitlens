@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - -QF*
+        - -ST1000
+  exclusions:
+    paths:
+      - frontend/node_modules
+
+formatters:
+  exclusions:
+    paths:
+      - frontend/node_modules

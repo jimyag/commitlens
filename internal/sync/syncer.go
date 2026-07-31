@@ -175,10 +175,7 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 	}
 
 	// Short Cooldown: if updated within the last 30 seconds, skip git fetch.
-	skipFetch := false
-	if !raw.LastUpdated.IsZero() && time.Since(raw.LastUpdated) < 30*time.Second {
-		skipFetch = true
-	}
+	skipFetch := !raw.LastUpdated.IsZero() && time.Since(raw.LastUpdated) < 30*time.Second
 
 	logMsg := "ensuring local repository..."
 	if skipFetch {

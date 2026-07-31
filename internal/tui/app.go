@@ -341,11 +341,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.globalGranularity--
 					a.onGlobalFilterChange()
 				}
-			} else if a.globalFocus == 2 {
-				if !a.globalLoginExpanded {
-					// No horizontal cycle for multi-select contributors anymore?
-					// Keep it simple for now.
-				}
 			} else if a.globalFocus == 3 {
 				if a.mode == viewTrend {
 					if a.trendPeriodCursor > 0 {
@@ -365,10 +360,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if a.globalGranularity < 3 {
 					a.globalGranularity++
 					a.onGlobalFilterChange()
-				}
-			} else if a.globalFocus == 2 {
-				if !a.globalLoginExpanded {
-					// No horizontal cycle
 				}
 			} else if a.globalFocus == 3 {
 				if a.mode == viewTrend {

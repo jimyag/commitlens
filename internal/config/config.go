@@ -152,17 +152,18 @@ func (c *Config) UpdateIdentitySettings(userMap map[string][]string, ignoredUser
 		return err
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+	}()
 	_ = tmp.Chmod(mode)
 
 	encoder := yaml.NewEncoder(tmp)
 	encoder.SetIndent(2)
 	if err := encoder.Encode(&document); err != nil {
-		tmp.Close()
 		return err
 	}
 	if err := encoder.Close(); err != nil {
-		tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

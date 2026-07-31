@@ -1,7 +1,6 @@
 package cache_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -10,11 +9,7 @@ import (
 )
 
 func TestRawCache(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "commitlens-raw-cache")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	c := cache.NewRawCache(tmpDir)
 	repo := "jimyag/commitlens"
@@ -45,11 +40,7 @@ func TestRawCache(t *testing.T) {
 }
 
 func TestStatsCache(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "commitlens-stats-cache")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	c := cache.NewStatsCache(tmpDir)
 	repo := "jimyag/commitlens"
