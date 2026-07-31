@@ -23,12 +23,7 @@ builds:
 
 archives:
   - formats:
-      - tar.gz
-    # use zip for windows archives
-    format_overrides:
-      - goos: windows
-        formats:
-          - zip
+      - binary
     name_template: >-
       {{ .ProjectName }}_
       {{- .Os }}_
