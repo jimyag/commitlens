@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { Outlet, Link, NavLink, useSearchParams } from 'react-router'
+import { Outlet, Link, NavLink, useLocation, useSearchParams } from 'react-router'
 import { useApp } from '../context/AppContext'
 import { useI18n, type Lang } from '../i18n/I18nContext'
 import type { MessageKey } from '../i18n/bundles/en'
@@ -31,7 +31,9 @@ export function Layout() {
     syncRepositories,
   } = useApp()
   const { lang, setLang, t, tf } = useI18n()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
+  const isContributionPage = location.pathname === '/contributions'
 
   const selectedRepos = useMemo(() => {
     const val = searchParams.get('repo')
@@ -185,8 +187,15 @@ export function Layout() {
             >
               {t('nav.identities')}
             </NavLink>
+            <NavLink
+              to={{ pathname: '/contributions' }}
+              style={({ isActive }) => navLinkStyle(isActive)}
+            >
+              {t('nav.contributions')}
+            </NavLink>
           </nav>
 
+          {!isContributionPage && <>
           {/* 仓库多选 */}
           <div ref={repoRef} style={{ position: 'relative' }}>
             <button
@@ -300,6 +309,7 @@ export function Layout() {
                 ? t('app.selectReposToSync')
                 : t('app.refresh')}
           </button>
+          </>}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

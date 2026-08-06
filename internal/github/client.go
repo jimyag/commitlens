@@ -16,10 +16,12 @@ import (
 )
 
 const defaultAPIURL = "https://api.github.com"
+const defaultGraphQLURL = "https://api.github.com/graphql"
 
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
+	graphqlURL string
 	token      string
 }
 
@@ -27,6 +29,7 @@ func NewClient(token string) *Client {
 	return &Client{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		baseURL:    defaultAPIURL,
+		graphqlURL: defaultGraphQLURL,
 		token:      strings.TrimSpace(token),
 	}
 }

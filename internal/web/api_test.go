@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,8 +15,93 @@ import (
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
 	gitdata "github.com/jimyag/commitlens/internal/git"
+	ghapi "github.com/jimyag/commitlens/internal/github"
 	statdata "github.com/jimyag/commitlens/internal/stats"
 )
+
+type fakeContributionClient struct {
+	report ghapi.ContributionReport
+	err    error
+}
+
+func (f fakeContributionClient) Contributions(_ context.Context, user, organization string, fromYear, toYear int) (ghapi.ContributionReport, error) {
+	report := f.report
+	report.User = user
+	report.Organization.Login = organization
+	report.FromYear = fromYear
+	report.ToYear = toYear
+	return report, f.err
+}
+
+func (f fakeContributionClient) ContributionOrganizations(_ context.Context, user string, _, _ int) (string, []ghapi.Organization, error) {
+	if user == "" {
+		user = "viewer"
+	}
+	return user, []ghapi.Organization{{Login: "alpha"}, {Login: "zeta"}}, f.err
+}
+
+func TestGetGitHubContributions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := &Server{
+		engine: gin.New(),
+		githubClient: fakeContributionClient{report: ghapi.ContributionReport{
+			TotalContributions: 12,
+			Years:              []ghapi.YearContributions{{Year: 2024, TotalContributions: 12}},
+		}},
+	}
+	server.registerAPI()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/github/contributions?organization=qbox&user=jimyag&from_year=2023&to_year=2024", nil)
+	server.engine.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET contributions status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var report ghapi.ContributionReport
+	if err := json.Unmarshal(response.Body.Bytes(), &report); err != nil {
+		t.Fatalf("decode report: %v", err)
+	}
+	if report.User != "jimyag" || report.Organization.Login != "qbox" || report.FromYear != 2023 || len(report.Years) != 1 {
+		t.Fatalf("unexpected report: %#v", report)
+	}
+}
+
+func TestGetGitHubContributionsValidatesQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := &Server{engine: gin.New(), githubClient: fakeContributionClient{}}
+	server.registerAPI()
+
+	response := httptest.NewRecorder()
+	target := "/api/github/contributions?organization=qbox&from_year=2025&to_year=2024"
+	server.engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target, nil))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("GET %s status = %d", target, response.Code)
+	}
+}
+
+func TestGetGitHubContributionsAllowsAllOrganizations(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := &Server{engine: gin.New(), githubClient: fakeContributionClient{}}
+	server.registerAPI()
+	response := httptest.NewRecorder()
+	server.engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/github/contributions?from_year=2024&to_year=2024", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET all contributions status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
+
+func TestGetGitHubContributionOrganizations(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	server := &Server{engine: gin.New(), githubClient: fakeContributionClient{}}
+	server.registerAPI()
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/github/contribution-organizations?from_year=2023&to_year=2024", nil)
+	server.engine.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"login":"alpha"`) {
+		t.Fatalf("GET contribution organizations status = %d, body = %s", response.Code, response.Body.String())
+	}
+}
 
 func TestGetReposIncludesDefaultRepositories(t *testing.T) {
 	gin.SetMode(gin.TestMode)

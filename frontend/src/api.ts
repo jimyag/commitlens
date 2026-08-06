@@ -102,6 +102,51 @@ export interface SelectedComparison {
   comparisons: ComparisonPoint[]
 }
 
+export interface ContributionDay {
+  date: string
+  count: number
+  level: string
+  color: string
+}
+
+export interface ContributionWeek {
+  days: ContributionDay[]
+}
+
+export interface ContributionBreakdown {
+  commits: number
+  pull_requests: number
+  issues: number
+  code_reviews: number
+}
+
+export interface YearContributions {
+  year: number
+  total_contributions: number
+  breakdown: ContributionBreakdown
+  weeks: ContributionWeek[]
+}
+
+export interface ContributionReport {
+  user: string
+  organization: {
+    id: string
+    login: string
+    name?: string
+    avatar_url?: string
+  }
+  from_year: number
+  to_year: number
+  total_contributions: number
+  years: YearContributions[]
+  fetched_at: string
+}
+
+export interface ContributionOrganizationOptions {
+  user: string
+  organizations: ContributionReport['organization'][]
+}
+
 export const api = {
   getRepos: () => axios.get<RepositoryList>('/api/repos'),
   getIdentities: () => axios.get<IdentitySettings>('/api/identities'),
@@ -140,4 +185,21 @@ export const api = {
     }),
   getCommits: (params: { repo?: string; from?: string; to?: string; login?: string; page?: number; per_page?: number }) =>
     axios.get<{ commits: CommitInfo[]; total: number; page: number; per_page: number }>('/api/commits', { params }),
+  getGitHubContributions: (params: { organization?: string; user?: string; fromYear: number; toYear: number }) =>
+    axios.get<ContributionReport>('/api/github/contributions', {
+      params: {
+        organization: params.organization || undefined,
+        user: params.user || undefined,
+        from_year: params.fromYear,
+        to_year: params.toYear,
+      },
+    }),
+  getGitHubContributionOrganizations: (params: { user?: string; fromYear: number; toYear: number }) =>
+    axios.get<ContributionOrganizationOptions>('/api/github/contribution-organizations', {
+      params: {
+        user: params.user || undefined,
+        from_year: params.fromYear,
+        to_year: params.toYear,
+      },
+    }),
 }

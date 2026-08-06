@@ -12,6 +12,7 @@ A universal Git contribution analyzer that tracks **commits**, **additions**, an
   - **Commit Volume**: Visualize submission frequency over time.
   - **Code Lines**: Track code churn with stacked addition/deletion trends (New!).
   - **Period Comparisons**: Compare each period with the immediately previous period and up to three matching historical periods.
+- **GitHub Organization Contributions**: View yearly commits, pull requests, issues, reviews, and contribution calendars, then download the combined chart as PNG.
 - **Interactive TUI**: A fast, keyboard-driven terminal interface powered by `bubbletea`.
 - **Modern Web UI**: A searchable, scrollable React interface with high-density ECharts visualizations.
 - **Deduplicated Co-authorship**: Correctly credits all participants in a commit (via `Co-authored-by` trailers).
@@ -55,6 +56,9 @@ repositories accessible to the configured GitHub token, but does not
 automatically synchronize the whole organization. Select repositories from the
 Web repository dropdown, then click **Refresh**. Exact `owner` + `repo` entries
 and discovered local repositories keep their existing default-sync behavior.
+
+The GitHub organization contribution view uses the GraphQL API. Grant the token
+`read:user` to include private contributions; years with no contributions are omitted.
 
 Commit and line trend pages in both Web and TUI include a comparison chart.
 Weekly comparisons use the same week position in earlier months; monthly and

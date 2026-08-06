@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -9,8 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jimyag/commitlens/internal/cache"
 	"github.com/jimyag/commitlens/internal/config"
+	ghapi "github.com/jimyag/commitlens/internal/github"
 	isync "github.com/jimyag/commitlens/internal/sync"
 )
+
+type contributionClient interface {
+	Contributions(ctx context.Context, user, organization string, fromYear, toYear int) (ghapi.ContributionReport, error)
+	ContributionOrganizations(ctx context.Context, user string, fromYear, toYear int) (string, []ghapi.Organization, error)
+}
 
 type Server struct {
 	engine       *gin.Engine
@@ -21,6 +28,7 @@ type Server struct {
 	cfg          *config.Config
 	rawCache     *cache.RawCache
 	statsCache   *cache.StatsCache
+	githubClient contributionClient
 	frontendFS   http.FileSystem
 }
 
@@ -47,6 +55,7 @@ func New(
 		cfg:          cfg,
 		rawCache:     rawCache,
 		statsCache:   statsCache,
+		githubClient: ghapi.NewClient(cfg.GitHub.Token),
 	}
 	s.mountFrontend(assets)
 	s.registerAPI()

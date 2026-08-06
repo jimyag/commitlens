@@ -26,6 +26,93 @@ func (s *Server) registerAPI() {
 	api.PUT("/identities", s.handleUpdateIdentities)
 	api.GET("/sync/status", s.handleGetSyncStatus)
 	api.POST("/sync", s.handleSync)
+	api.GET("/github/contributions", s.handleGetGitHubContributions)
+	api.GET("/github/contribution-organizations", s.handleGetGitHubContributionOrganizations)
+}
+
+func (s *Server) handleGetGitHubContributionOrganizations(c *gin.Context) {
+	if s.githubClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "GitHub contribution client is unavailable"})
+		return
+	}
+	currentYear := time.Now().UTC().Year()
+	fromYear, err := queryYear(c, "from_year", currentYear-5)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	toYear, err := queryYear(c, "to_year", currentYear)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if fromYear > toYear || toYear-fromYear > 20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "year range must be ordered and no longer than 20 years"})
+		return
+	}
+	user, organizations, err := s.githubClient.ContributionOrganizations(
+		c.Request.Context(), strings.TrimSpace(c.Query("user")), fromYear, toYear,
+	)
+	if err != nil {
+		status := http.StatusBadGateway
+		if strings.Contains(err.Error(), "token is required") {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user": user, "organizations": organizations})
+}
+
+func (s *Server) handleGetGitHubContributions(c *gin.Context) {
+	if s.githubClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "GitHub contribution client is unavailable"})
+		return
+	}
+	organization := strings.TrimSpace(c.Query("organization"))
+	currentYear := time.Now().UTC().Year()
+	fromYear, err := queryYear(c, "from_year", currentYear-5)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	toYear, err := queryYear(c, "to_year", currentYear)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if fromYear > toYear || toYear-fromYear > 20 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "year range must be ordered and no longer than 20 years"})
+		return
+	}
+	report, err := s.githubClient.Contributions(
+		c.Request.Context(),
+		strings.TrimSpace(c.Query("user")),
+		organization,
+		fromYear,
+		toYear,
+	)
+	if err != nil {
+		status := http.StatusBadGateway
+		if strings.Contains(err.Error(), "token is required") {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, report)
+}
+
+func queryYear(c *gin.Context, name string, defaultValue int) (int, error) {
+	value := strings.TrimSpace(c.Query(name))
+	if value == "" {
+		return defaultValue, nil
+	}
+	year, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a year", name)
+	}
+	return year, nil
 }
 
 type repositorySyncStatus struct {
