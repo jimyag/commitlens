@@ -21,11 +21,18 @@ export interface WeeklyEntry {
   contributors: Record<string, ContributorWeeklyStats>
 }
 
+export interface RepositorySizePoint {
+  lines: number
+  commit: string
+  date: string
+}
+
 export interface StatsData {
   repo: string
   computed_at: string
   contributors: Record<string, ContributorStats>
   weekly: Record<string, WeeklyEntry>
+  repository_size?: Record<string, Record<string, RepositorySizePoint>>
 }
 
 export interface CommitInfo {

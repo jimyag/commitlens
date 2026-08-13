@@ -87,6 +87,12 @@ export const zh: Record<keyof typeof en, string> = {
   'chart.prOnTop': '柱顶显示提交数',
   'chart.tooltipLine': '{who}: <span style="font-weight:600">{value}</span> 次提交',
 
+  'repositorySize.title': '仓库规模',
+  'repositorySize.description':
+    '默认分支每个周期末 Git 跟踪文本文件的物理总行数；包含文档、配置、注释和空行，不包含二进制文件。',
+  'repositorySize.series': '总行数',
+  'repositorySize.empty': '暂无仓库规模数据，请点击刷新完成计算。',
+
   'nav.dashboard': '提交数趋势',
   'nav.contributors': '贡献者排行榜',
   'nav.prs': '提交历史',

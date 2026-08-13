@@ -220,8 +220,19 @@ func (s *Syncer) syncRepo(ctx context.Context, repo config.Repository, onProgres
 		return fmt.Errorf("save raw cache: %w", err)
 	}
 
+	updateStatus("calculating repository size...")
+	lineHistory, err := git.GetLineCountHistory(ctx, gitDir)
+	if err != nil {
+		return fmt.Errorf("get repository size failed: %w", err)
+	}
+
 	updateStatus("aggregating statistics...")
 	computed := stats.Aggregate(raw, s.cfg)
+	location := time.Local
+	if configured, err := s.cfg.ReportingLocation(); err == nil {
+		location = configured
+	}
+	computed.RepositorySize = stats.BuildRepositorySize(lineHistory, location, time.Now())
 	if err := s.statsCache.Save(computed); err != nil {
 		return fmt.Errorf("save stats cache: %w", err)
 	}

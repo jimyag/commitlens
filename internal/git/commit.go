@@ -12,3 +12,11 @@ type Commit struct {
 	Additions    int       `json:"additions"`
 	Deletions    int       `json:"deletions"`
 }
+
+// LineCountPoint is the total number of lines in tracked text files after a
+// commit on the repository's default branch.
+type LineCountPoint struct {
+	SHA   string
+	Date  time.Time
+	Lines int
+}

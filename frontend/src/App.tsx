@@ -12,6 +12,7 @@ import {
 import { TrendChart } from './components/TrendChart'
 import type { Granularity } from './components/TrendChart'
 import { ComparisonChart } from './components/ComparisonChart'
+import { RepositorySizeChart } from './components/RepositorySizeChart'
 import { useI18n } from './i18n/I18nContext'
 import type { MessageKey } from './i18n/bundles/en'
 
@@ -185,6 +186,26 @@ export default function App({ metric = 'commits' }: { metric?: 'commits' | 'line
       padding: '20px 5% 32px',
     }}>
       <section>
+        {metric === 'lines' && (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 12 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 6px', color: '#374151' }}>
+                {t('repositorySize.title')}
+              </h2>
+              <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+                {t('repositorySize.description')}
+              </p>
+            </div>
+            <div style={{
+              background: '#fff',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              padding: 16,
+            }}>
+              <RepositorySizeChart stats={filteredStats} granularity={gran} />
+            </div>
+          </div>
+        )}
         <div style={{ marginBottom: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 6px', color: '#374151' }}>
             {t(titleKey)}

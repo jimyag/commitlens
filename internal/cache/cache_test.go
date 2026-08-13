@@ -49,6 +49,9 @@ func TestStatsCache(t *testing.T) {
 		Contributors: map[string]*cache.ContributorStats{
 			"jimyag": {Login: "jimyag", CommitCount: 5, Additions: 500, Deletions: 100},
 		},
+		RepositorySize: map[string]map[string]cache.RepositorySizePoint{
+			"year": {"2026": {Lines: 1234, Commit: "abc", Date: time.Now().UTC()}},
+		},
 	}
 
 	if err := c.Save(stats); err != nil {
@@ -65,5 +68,8 @@ func TestStatsCache(t *testing.T) {
 	}
 	if loaded.Contributors["jimyag"].CommitCount != 5 {
 		t.Errorf("expected CommitCount 5, got %d", loaded.Contributors["jimyag"].CommitCount)
+	}
+	if loaded.RepositorySize["year"]["2026"].Lines != 1234 {
+		t.Errorf("expected repository size 1234, got %d", loaded.RepositorySize["year"]["2026"].Lines)
 	}
 }

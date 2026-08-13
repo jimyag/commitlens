@@ -292,6 +292,9 @@ func TestGetStatsReadsLatestCache(t *testing.T) {
 		Repo:         "example-org/alpha",
 		Contributors: map[string]*cache.ContributorStats{},
 		Weekly:       map[string]*cache.WeeklyEntry{},
+		RepositorySize: map[string]map[string]cache.RepositorySizePoint{
+			"month": {"2026-08": {Lines: 123, Commit: "abc"}},
+		},
 	}); err != nil {
 		t.Fatalf("save stats: %v", err)
 	}
@@ -302,6 +305,9 @@ func TestGetStatsReadsLatestCache(t *testing.T) {
 
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "example-org/alpha") {
 		t.Fatalf("GET /api/stats status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"lines":123`) {
+		t.Fatalf("GET /api/stats omitted repository size: %s", response.Body.String())
 	}
 }
 

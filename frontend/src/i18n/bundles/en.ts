@@ -86,6 +86,12 @@ export const en = {
   'chart.prOnTop': 'Commit count on top',
   'chart.tooltipLine': '{who}: <span style="font-weight:600">{value}</span> commits',
 
+  'repositorySize.title': 'Repository size',
+  'repositorySize.description':
+    'Total physical lines in Git-tracked text files at the end of each period on the default branch. Documentation, configuration, comments, and blank lines are included; binary files are excluded.',
+  'repositorySize.series': 'Total lines',
+  'repositorySize.empty': 'No repository size data yet. Click Refresh to calculate it.',
+
   'nav.dashboard': 'Commit trend',
   'nav.contributors': 'Contributors',
   'nav.prs': 'Commits',

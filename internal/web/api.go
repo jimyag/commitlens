@@ -406,18 +406,20 @@ func (s *Server) handleGetStats(c *gin.Context) {
 }
 
 type statsResponse struct {
-	Repo         string                             `json:"repo"`
-	ComputedAt   time.Time                          `json:"computed_at"`
-	Contributors map[string]*cache.ContributorStats `json:"contributors"`
-	Weekly       map[string]*cache.WeeklyEntry      `json:"weekly"`
+	Repo           string                                          `json:"repo"`
+	ComputedAt     time.Time                                       `json:"computed_at"`
+	Contributors   map[string]*cache.ContributorStats              `json:"contributors"`
+	Weekly         map[string]*cache.WeeklyEntry                   `json:"weekly"`
+	RepositorySize map[string]map[string]cache.RepositorySizePoint `json:"repository_size,omitempty"`
 }
 
 func newStatsResponse(value *cache.StatsData) statsResponse {
 	return statsResponse{
-		Repo:         value.Repo,
-		ComputedAt:   value.ComputedAt,
-		Contributors: value.Contributors,
-		Weekly:       value.Weekly,
+		Repo:           value.Repo,
+		ComputedAt:     value.ComputedAt,
+		Contributors:   value.Contributors,
+		Weekly:         value.Weekly,
+		RepositorySize: value.RepositorySize,
 	}
 }
 

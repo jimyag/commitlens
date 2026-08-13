@@ -28,12 +28,19 @@ type WeeklyEntry struct {
 	Contributors   map[string]*ContributorWeeklyStats `json:"contributors"`
 }
 
+type RepositorySizePoint struct {
+	Lines  int       `json:"lines"`
+	Commit string    `json:"commit"`
+	Date   time.Time `json:"date"`
+}
+
 type StatsData struct {
-	Repo         string                       `json:"repo"`
-	ComputedAt   time.Time                    `json:"computed_at"`
-	Contributors map[string]*ContributorStats `json:"contributors"`
-	Daily        map[string]*WeeklyEntry      `json:"daily,omitempty"`
-	Weekly       map[string]*WeeklyEntry      `json:"weekly"`
+	Repo           string                                    `json:"repo"`
+	ComputedAt     time.Time                                 `json:"computed_at"`
+	Contributors   map[string]*ContributorStats              `json:"contributors"`
+	Daily          map[string]*WeeklyEntry                   `json:"daily,omitempty"`
+	Weekly         map[string]*WeeklyEntry                   `json:"weekly"`
+	RepositorySize map[string]map[string]RepositorySizePoint `json:"repository_size,omitempty"`
 }
 
 type StatsCache struct {
