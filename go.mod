@@ -1,6 +1,8 @@
 module github.com/jimyag/commitlens
 
-go 1.26.2
+go 1.27
+
+toolchain go1.27.3
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
