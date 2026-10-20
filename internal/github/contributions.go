@@ -70,7 +70,7 @@ type graphQLError struct {
 	Message string `json:"message"`
 }
 
-func (c *Client) queryGraphQL(ctx context.Context, query string, variables map[string]any, target any) error {
+func (c *Client) queryGraphQL(ctx context.Context, query string, variables map[string]any, target any) (err error) {
 	if c.token == "" {
 		return errors.New("GitHub token is required for contribution data")
 	}
@@ -91,7 +91,11 @@ func (c *Client) queryGraphQL(ctx context.Context, query string, variables map[s
 	if err != nil {
 		return fmt.Errorf("call GitHub GraphQL API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close GraphQL response: %w", closeErr)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 		return fmt.Errorf("GitHub GraphQL API returned %s: %s", resp.Status, strings.TrimSpace(string(message)))
