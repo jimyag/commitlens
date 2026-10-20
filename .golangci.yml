@@ -11,6 +11,9 @@ linters:
     paths:
       - frontend/node_modules
 
+issues:
+  new-from-rev: HEAD~
+
 formatters:
   exclusions:
     paths:
