@@ -6,7 +6,7 @@ toolchain go1.27.3
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
-	github.com/NimbleMarkets/ntcharts v0.5.1
+	github.com/NimbleMarkets/ntcharts v0.5.2
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/gin-gonic/gin v1.12.0
